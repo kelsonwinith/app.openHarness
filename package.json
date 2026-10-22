@@ -1,0 +1,33 @@
+{
+  "name": "openharness",
+  "version": "0.1.0",
+  "description": "Agent Harness Console — Compose agent workflows, attach skills, and observe execution on CLI harnesses.",
+  "main": "bin/openharness.js",
+  "bin": {
+    "openharness": "./bin/openharness.js"
+  },
+  "preferGlobal": true,
+  "files": [
+    "bin",
+    "client",
+    "README.md",
+    "GLOSSARY.md"
+  ],
+  "scripts": {
+    "dev": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "node bin/openharness.js"
+  },
+  "keywords": [
+    "agent",
+    "harness",
+    "workflows",
+    "skills",
+    "opencode",
+    "codex",
+    "antigravity",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT"
+}
