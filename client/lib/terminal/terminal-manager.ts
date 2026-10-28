@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 import * as childProcess from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 interface TerminalSession {
   id: string;
@@ -16,16 +18,45 @@ interface TerminalSession {
 // Global cache for persistent terminal sessions across Next.js API requests
 const globalForTerminal = global as unknown as {
   terminalSessions?: Map<string, TerminalSession>;
+  projectPaths?: Map<string, string>;
 };
 
 const sessions: Map<string, TerminalSession> =
   globalForTerminal.terminalSessions || new Map<string, TerminalSession>();
 
+const projectPaths: Map<string, string> =
+  globalForTerminal.projectPaths || new Map<string, string>();
+
 if (process.env.NODE_ENV !== 'production') {
   globalForTerminal.terminalSessions = sessions;
+  globalForTerminal.projectPaths = projectPaths;
+}
+
+function ensureSpawnHelperExecutable() {
+  if (process.platform === 'win32') return;
+  try {
+    const candidateDirs = [
+      path.join(process.cwd(), 'node_modules/node-pty/prebuilds'),
+      path.join(process.cwd(), 'client/node_modules/node-pty/prebuilds'),
+      path.join(process.env.HOME || '', '.openharness/node-pty/prebuilds')
+    ];
+    for (const dir of candidateDirs) {
+      if (!fs.existsSync(dir)) continue;
+      const subdirs = fs.readdirSync(dir);
+      for (const sub of subdirs) {
+        const helper = path.join(dir, sub, 'spawn-helper');
+        if (fs.existsSync(helper)) {
+          try {
+            fs.chmodSync(helper, 0o755);
+          } catch {}
+        }
+      }
+    }
+  } catch {}
 }
 
 function getPty() {
+  ensureSpawnHelperExecutable();
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('node-pty');
@@ -49,6 +80,8 @@ function getEnhancedPath(): string {
 
 export class TerminalManager {
   static getOrCreateSession(projectId: string, projectPath: string): TerminalSession {
+    projectPaths.set(projectId, projectPath);
+
     let session = sessions.get(projectId);
     if (session && session.isRunning) {
       return session;
@@ -56,6 +89,7 @@ export class TerminalManager {
 
     const ptyModule = getPty();
     const shell = getDefaultShell();
+    const shellArgs = process.platform === 'win32' ? [] : ['-i'];
     const env = {
       ...process.env,
       TERM: 'xterm-256color',
@@ -68,8 +102,8 @@ export class TerminalManager {
 
     if (ptyModule) {
       try {
-        proc = ptyModule.spawn(shell, [], {
-          name: 'xterm-color',
+        proc = ptyModule.spawn(shell, shellArgs, {
+          name: 'xterm-256color',
           cols: 80,
           rows: 24,
           cwd: projectPath,
@@ -83,7 +117,7 @@ export class TerminalManager {
 
     if (!proc) {
       // Fallback to standard child_process spawn
-      proc = childProcess.spawn(shell, [], {
+      proc = childProcess.spawn(shell, shellArgs, {
         cwd: projectPath,
         env,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -108,6 +142,7 @@ export class TerminalManager {
     const onData = (chunk: string | Buffer) => {
       const text = chunk.toString();
       session!.backlog += text;
+
       // Retain max 200,000 characters in scrollback buffer
       if (session!.backlog.length > 200000) {
         session!.backlog = session!.backlog.slice(session!.backlog.length - 200000);
@@ -145,8 +180,15 @@ export class TerminalManager {
   }
 
   static write(projectId: string, data: string): boolean {
-    const session = sessions.get(projectId);
-    if (!session || !session.isRunning) return false;
+    let session = sessions.get(projectId);
+    if (!session || !session.isRunning) {
+      const pPath = projectPaths.get(projectId);
+      if (pPath) {
+        session = this.getOrCreateSession(projectId, pPath);
+      } else {
+        return false;
+      }
+    }
 
     if (session.ptyProcess.write) {
       session.ptyProcess.write(data);

@@ -6,6 +6,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   Terminal as TerminalIcon,
   X,
@@ -15,7 +16,8 @@ import {
   Maximize2,
   Folder,
   CircleDot,
-  ExternalLink
+  ExternalLink,
+  Square
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -73,23 +75,32 @@ export function ProjectTerminalModal({
     if (!termRef.current) {
       const term = new Terminal({
         cursorBlink: true,
+        convertEol: true,
         fontSize: 12,
-        lineHeight: 1.25,
-        fontFamily: 'Menlo, Monaco, "SF Mono", "Courier New", monospace',
+        lineHeight: 1.3,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         theme: {
-          background: '#0c0e14',
-          foreground: '#e2e8f0',
-          cursor: '#38bdf8',
-          cursorAccent: '#0c0e14',
-          selectionBackground: '#1e3a5f',
-          black: '#1e293b',
-          red: '#f87171',
-          green: '#4ade80',
-          yellow: '#fbbf24',
-          blue: '#60a5fa',
-          magenta: '#c084fc',
-          cyan: '#38bdf8',
-          white: '#f8fafc'
+          background: '#09090b', // zinc-950
+          foreground: '#f4f4f5', // zinc-100
+          cursor: '#a1a1aa', // zinc-400
+          cursorAccent: '#09090b',
+          selectionBackground: '#27272a', // zinc-800
+          black: '#18181b', // zinc-900
+          red: '#ef4444',
+          green: '#22c55e',
+          yellow: '#eab308',
+          blue: '#3b82f6',
+          magenta: '#a855f7',
+          cyan: '#06b6d4',
+          white: '#fafafa',
+          brightBlack: '#71717a',
+          brightRed: '#f87171',
+          brightGreen: '#4ade80',
+          brightYellow: '#facc15',
+          brightBlue: '#60a5fa',
+          brightMagenta: '#c084fc',
+          brightCyan: '#22d3ee',
+          brightWhite: '#ffffff'
         }
       });
 
@@ -190,20 +201,38 @@ export function ProjectTerminalModal({
       abortController.abort();
       resizeObserver.disconnect();
     };
-  }, [projectId, projectPath, handleStatusUpdate]);
+  }, [projectId, projectPath, handleStatusUpdate, scanForAppUrl]);
 
-  // When modal becomes visible, refit xterm and focus
+  // When modal becomes visible, refit xterm, resize PTY, and focus
   useEffect(() => {
     if (isOpen && fitAddonRef.current && termRef.current) {
-      const timeout = setTimeout(() => {
+      const fitAndFocus = () => {
         try {
           fitAddonRef.current?.fit();
           termRef.current?.focus();
+          if (termRef.current) {
+            fetch('/api/terminal/resize', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId,
+                cols: termRef.current.cols,
+                rows: termRef.current.rows
+              })
+            }).catch(() => {});
+          }
         } catch {}
-      }, 50);
-      return () => clearTimeout(timeout);
+      };
+
+      fitAndFocus();
+      const t1 = setTimeout(fitAndFocus, 100);
+      const t2 = setTimeout(fitAndFocus, 250);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
-  }, [isOpen, isMaximized]);
+  }, [isOpen, isMaximized, projectId]);
 
   // Quick action: send Ctrl+C
   const handleSendCtrlC = () => {
@@ -234,7 +263,7 @@ export function ProjectTerminalModal({
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs transition-opacity duration-200 select-none',
+        'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] transition-opacity duration-200 select-none',
         isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       )}
       onClick={onClose}
@@ -242,37 +271,24 @@ export function ProjectTerminalModal({
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'flex flex-col bg-[#0c0e14] border border-border/80 shadow-2xl overflow-hidden transition-all duration-150',
+          'flex flex-col bg-card text-card-foreground border border-border shadow-2xl overflow-hidden transition-all duration-150 rounded-xl',
           isMaximized
-            ? 'w-[98vw] h-[96vh] rounded-xl'
-            : 'w-[92vw] max-w-4xl h-[72vh] rounded-xl'
+            ? 'w-[98vw] h-[96vh]'
+            : 'w-[92vw] max-w-4xl h-[74vh]'
         )}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-muted/20 shrink-0 text-xs">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-muted/10 shrink-0 text-xs">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="flex items-center gap-1.5 font-medium text-foreground">
               <TerminalIcon className="h-4 w-4 text-primary" />
-              <span className="font-semibold">{projectName}</span>
-              <span className="text-muted-foreground font-mono text-[11px]">Terminal</span>
+              <span className="font-semibold text-sm tracking-tight">{projectName}</span>
+              {isRunning && (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" title="Process active" />
+              )}
             </div>
 
-            <Badge
-              variant="outline"
-              className={cn(
-                'text-[10px] font-mono gap-1 border-border/70 py-0 h-5',
-                isRunning
-                  ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
-                  : 'text-muted-foreground'
-              )}
-            >
-              <CircleDot
-                className={cn('h-2.5 w-2.5', isRunning ? 'animate-pulse text-emerald-400' : 'text-muted-foreground')}
-              />
-              {isRunning ? (pid ? `Running (pid ${pid})` : 'Running') : 'Stopped'}
-            </Badge>
-
-            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/70 bg-muted/40 px-2 py-0.5 rounded truncate max-w-xs">
+            <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground/75 bg-muted/40 border border-border/50 px-2 py-0.5 rounded truncate max-w-xs">
               <Folder className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{projectPath}</span>
             </span>
@@ -283,26 +299,26 @@ export function ProjectTerminalModal({
                 href={detectedAppUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 hover:text-emerald-300 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 border border-emerald-500/25 text-emerald-500 hover:bg-emerald-500/20 transition-colors shadow-2xs shrink-0 cursor-pointer"
                 title={`Open detected dev server at ${detectedAppUrl} in new browser tab`}
               >
                 <ExternalLink className="h-3 w-3" />
                 <span>Open App</span>
-                <span className="font-mono text-[10px] text-emerald-400/80">({detectedAppUrl.replace('http://', '')})</span>
+                <span className="font-mono text-[10px] text-emerald-500/80">({detectedAppUrl.replace('http://', '')})</span>
               </a>
             )}
           </div>
 
           {/* Quick Actions & Window Controls */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               size="sm"
               variant="ghost"
               onClick={handleSendCtrlC}
-              className="h-7 px-2 text-[11px] gap-1 font-mono text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-7 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
               title="Interrupt current running process (Ctrl+C)"
             >
-              <span>^C</span>
+              <Square className="h-3 w-3 fill-current opacity-70" />
               <span className="hidden sm:inline">Interrupt</span>
             </Button>
 
@@ -310,7 +326,7 @@ export function ProjectTerminalModal({
               size="sm"
               variant="ghost"
               onClick={handleClear}
-              className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-7 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
               title="Clear terminal screen"
             >
               <Trash2 className="h-3 w-3" />
@@ -321,14 +337,14 @@ export function ProjectTerminalModal({
               size="sm"
               variant="ghost"
               onClick={handleRestart}
-              className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-7 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
               title="Restart terminal shell"
             >
               <RotateCcw className="h-3 w-3" />
               <span className="hidden sm:inline">Restart</span>
             </Button>
 
-            <div className="h-4 w-px bg-border/60 mx-1" />
+            <Separator orientation="vertical" className="h-4 mx-0.5" />
 
             <Button
               size="sm"
@@ -353,19 +369,13 @@ export function ProjectTerminalModal({
         </div>
 
         {/* Xterm Render Container */}
-        <div className="flex-1 p-2 bg-[#0c0e14] overflow-hidden select-text">
+        <div
+          className="flex-1 p-3 bg-[#09090b] overflow-hidden select-text cursor-text"
+          onClick={() => {
+            termRef.current?.focus();
+          }}
+        >
           <div ref={containerRef} className="h-full w-full" />
-        </div>
-
-        {/* Footer Info */}
-        <div className="border-t border-border/40 px-3 py-1.5 bg-[#090b10] flex items-center justify-between text-[10px] text-muted-foreground font-mono shrink-0">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Process persists in background when closed. Dev servers (e.g. npm run dev) stay alive.
-          </span>
-          <span className="opacity-70">
-            Press <kbd className="bg-muted/30 px-1 py-0.5 rounded text-[9px]">Esc</kbd> or click ✕ to return to chat
-          </span>
         </div>
       </div>
     </div>

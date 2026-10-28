@@ -29,11 +29,11 @@ The active workflow mode selected in project chat. When set to `None (Direct Cha
 _Avoid_: Ad-hoc execution mode, prompt runner
 
 **Step**:
-A skill bound into a workflow at a specific position, with its own approval-gate setting and optional instruction override.
-_Avoid_: Skill (when the bound instance is meant), stage
+A skill bound into a workflow at a specific position within a Step Group, with an optional instruction override. If its underlying skill is uninstalled from the host machine, the step is preserved as a missing step with danger styling, providing 1-click direct inline reinstallation (without modal popups) and step deletion actions.
+_Avoid_: Skill (when the bound instance is meant), stage, silent step pruning, modal reinstallation fallbacks, individual skill approval gates
 
 **Step Group**:
-A named logical section or phase within a workflow (e.g. "Discovery", "Build", "QA") containing one or more ordered steps. Provides organizational structure while flattening into an ordered execution sequence.
+A named logical section or phase within a workflow (e.g. "Requirements", "Implements", "QA") containing one or more ordered steps and an optional flow-level approval gate setting. When its gate is enabled, execution runs all skills in the group, executes the prompt instructions, and pauses at an approval gate checkpoint before proceeding to the subsequent group or completing the flow.
 _Avoid_: Section, folder, sub-workflow
 
 **Skill library**:
@@ -41,8 +41,8 @@ The global catalog of agent skills installed in `~/.agents/skills/` on the user'
 _Avoid_: Registry, marketplace, project-local skill directory
 
 **Gate**:
-A checkpoint at the end of a step where execution pauses until a developer approves or rejects continuing. Embedded directly in the chat stream as an interactive approval card with one-click continue or stop actions.
-_Avoid_: Checkpoint, approval, pause, modal dialog approval
+A checkpoint at the flow/group level where execution pauses after a group completes its skills and prompt instructions until a developer approves or rejects continuing. Embedded directly in the chat stream as an interactive approval card with one-click continue or stop actions. Approval gates operate at the flow/group boundary rather than on individual skills.
+_Avoid_: Skill-level gate, individual skill checkpoint, pause modal dialog
 
 **Harness adapter**:
 The boundary abstraction decoupling the console interface and state stores from harness runtimes, whether client-simulated or connected to real CLI agent runners.

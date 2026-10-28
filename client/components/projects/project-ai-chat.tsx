@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Sparkles,
   Send,
@@ -16,10 +17,13 @@ import {
   Pause,
   Square,
   ShieldAlert,
-  Terminal
+  Terminal,
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useConsoleStore } from '@/lib/stores/console-store';
 import { useUIStore } from '@/lib/stores/ui-store';
-import { Project, Session, ChatMessage, Workflow } from '@/lib/domain/types';
+import { Project, Session, ChatMessage, Workflow, Step } from '@/lib/domain/types';
 import { HARNESSES } from '@/lib/domain/constants';
 import { DynamicIcon } from '@/components/icons/dynamic-icon';
 import { FormattedChatMessage } from './formatted-chat-message';
@@ -75,6 +79,7 @@ export function ProjectAIChat({
   const stopRun = useConsoleStore((s) => s.stopRun);
   const approveGate = useConsoleStore((s) => s.approveGate);
   const rejectGate = useConsoleStore((s) => s.rejectGate);
+  const reviseGate = useConsoleStore((s) => s.reviseGate);
   const setActiveSession = useConsoleStore((s) => s.setActiveSession);
   const openDialog = useUIStore((s) => s.openDialog);
 
@@ -112,6 +117,23 @@ export function ProjectAIChat({
   const selectedWorkflow = selectedWorkflowId
     ? workflows.find((w) => w.id === selectedWorkflowId) || null
     : null;
+
+  const isSkillInstalled = (step: Step) => {
+    return !!skills.find(
+      (sk) =>
+        sk.id === step.skillId ||
+        sk.name.toLowerCase() === step.skillId.toLowerCase() ||
+        (step.skillName && sk.name.toLowerCase() === step.skillName.toLowerCase()) ||
+        (step.skillId.startsWith('skill-') && sk.name.toLowerCase() === step.skillId.replace(/^skill-/, '').toLowerCase())
+    );
+  };
+
+  const missingSteps = useMemo(() => {
+    if (!selectedWorkflow) return [];
+    return selectedWorkflow.steps.filter((st) => !isSkillInstalled(st));
+  }, [selectedWorkflow, skills]);
+
+  const hasMissingSkills = missingSteps.length > 0;
 
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isTerminalRunning, setIsTerminalRunning] = useState(false);
@@ -177,7 +199,21 @@ export function ProjectAIChat({
 
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
+
+    // Feedback sent while at an approval gate reproduces the current phase with adjustments
+    if (activeRun && activeRun.status === 'waiting') {
+      if (!text) return;
+      setInput('');
+      const targetSessionId = session?.id;
+      if (targetSessionId) {
+        addSessionMessage(targetSessionId, createMessage('user', text));
+      }
+      reviseGate(text);
+      return;
+    }
+
     if ((!text && !selectedWorkflow) || loading) return;
+    if (selectedWorkflow && hasMissingSkills) return;
 
     setInput('');
     setLoading(true);
@@ -441,41 +477,184 @@ export function ProjectAIChat({
         <div className="mx-auto max-w-3xl">
           {/* Tagged Skills Bar for Selected Workflow Flow */}
           {selectedWorkflow && (
-            <div className="mb-2 flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-primary/5 border border-primary/20 text-xs">
-              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                <span className="font-semibold text-xs text-foreground flex items-center gap-1.5 shrink-0">
-                  <WorkflowIcon className="h-3.5 w-3.5 text-primary" />
-                  Flow: {selectedWorkflow.name}
-                </span>
-                <span className="text-muted-foreground/40 text-xs shrink-0">•</span>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {selectedWorkflow.steps.map((st, sIdx) => {
-                    const skill = skills.find((sk) => sk.id === st.skillId);
-                    return (
-                      <span
-                        key={st.id || sIdx}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-background/90 border border-border/80 text-foreground shadow-2xs"
-                      >
-                        <span className="text-[9px] font-mono text-muted-foreground">0{sIdx + 1}</span>
-                        <span>{skill ? skill.name : st.skillId}</span>
-                        {st.gate && (
-                          <span className="px-1 py-0.2 rounded text-[8.5px] font-mono uppercase bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                            Gate
+            <div
+              className={cn(
+                'mb-2 flex flex-col gap-2 p-2.5 rounded-xl border text-xs transition-colors',
+                hasMissingSkills
+                  ? 'bg-destructive/5 border-destructive/30'
+                  : 'bg-primary/5 border-primary/20'
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <span
+                    className={cn(
+                      'font-semibold text-xs flex items-center gap-1.5 shrink-0',
+                      hasMissingSkills ? 'text-destructive font-bold' : 'text-foreground'
+                    )}
+                  >
+                    {hasMissingSkills ? (
+                      <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                    ) : (
+                      <WorkflowIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                    )}
+                    Flow: {selectedWorkflow.name}
+                  </span>
+                  <span className="text-muted-foreground/40 text-xs shrink-0">•</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selectedWorkflow.groups && selectedWorkflow.groups.length > 0 ? (
+                      selectedWorkflow.groups.map((group, gIdx) => (
+                        <React.Fragment key={group.id}>
+                          <div className="flex items-center gap-1 bg-background/60 border border-border/70 rounded-md px-1.5 py-0.5">
+                            <span className="text-[9.5px] font-semibold text-muted-foreground mr-0.5">{group.name}:</span>
+                            {group.steps.map((st, sIdx) => {
+                              const isInstalled = isSkillInstalled(st);
+                              const skill = skills.find(
+                                (sk) =>
+                                  sk.id === st.skillId ||
+                                  sk.name.toLowerCase() === st.skillId.toLowerCase() ||
+                                  (st.skillName && sk.name.toLowerCase() === st.skillName.toLowerCase()) ||
+                                  (st.skillId.startsWith('skill-') && sk.name.toLowerCase() === st.skillId.replace(/^skill-/, '').toLowerCase())
+                              );
+                              const displayName = skill?.name || st.skillName || st.skillId;
+                              return (
+                                <span
+                                  key={st.id || sIdx}
+                                  className={cn(
+                                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border shadow-2xs',
+                                    isInstalled
+                                      ? 'bg-background/90 border-border/80 text-foreground'
+                                      : 'bg-destructive/15 border-destructive/40 text-destructive font-semibold'
+                                  )}
+                                  title={isInstalled ? undefined : `Missing skill: ${displayName}`}
+                                >
+                                  <span>{displayName}</span>
+                                  {!isInstalled && (
+                                    <span className="text-[8px] uppercase font-bold text-destructive">
+                                      (missing)
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {group.gate && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-mono uppercase bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                              <ShieldAlert className="h-3 w-3" />
+                              Gate
+                            </span>
+                          )}
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      selectedWorkflow.steps.map((st, sIdx) => {
+                        const isInstalled = isSkillInstalled(st);
+                        const skill = skills.find(
+                          (sk) =>
+                            sk.id === st.skillId ||
+                            sk.name.toLowerCase() === st.skillId.toLowerCase() ||
+                            (st.skillName && sk.name.toLowerCase() === st.skillName.toLowerCase()) ||
+                            (st.skillId.startsWith('skill-') && sk.name.toLowerCase() === st.skillId.replace(/^skill-/, '').toLowerCase())
+                        );
+                        const displayName = skill?.name || st.skillName || st.skillId;
+                        return (
+                          <span
+                            key={st.id || sIdx}
+                            className={cn(
+                              'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border shadow-2xs',
+                              isInstalled
+                                ? 'bg-background/90 border-border/80 text-foreground'
+                                : 'bg-destructive/15 border-destructive/40 text-destructive font-semibold'
+                            )}
+                            title={isInstalled ? undefined : `Missing skill: ${displayName}`}
+                          >
+                            <span
+                              className={cn(
+                                'text-[9px] font-mono',
+                                isInstalled ? 'text-muted-foreground' : 'text-destructive/80'
+                              )}
+                            >
+                              0{sIdx + 1}
+                            </span>
+                            <span>{displayName}</span>
+                            {!isInstalled && (
+                              <span className="text-[8.5px] uppercase font-bold text-destructive">
+                                (missing)
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                    );
-                  })}
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedWorkflowId(null)}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer shrink-0 transition-colors"
+                  title="Deselect workflow and switch to direct agent chat"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {hasMissingSkills && (
+                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-destructive/20 text-[11px] text-destructive">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <AlertCircle className="h-3 w-3 shrink-0 text-destructive" />
+                    <span className="truncate">
+                      Execution blocked: {missingSteps.length}{' '}
+                      {missingSteps.length === 1 ? 'skill is' : 'skills are'} missing or uninstalled.
+                    </span>
+                  </div>
+                  <Link
+                    href={`/workflows/${selectedWorkflow.id}`}
+                    className="inline-flex items-center gap-1 font-semibold underline underline-offset-2 hover:opacity-80 shrink-0 text-destructive text-[11px]"
+                  >
+                    Reinstall in Editor
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Active Gate Checkpoint Banner when paused for developer approval */}
+          {activeRun && activeRun.status === 'waiting' && (
+            <div className="mb-2 flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-xs shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse shrink-0" />
+                <div className="min-w-0 truncate">
+                  <span className="font-semibold text-foreground">
+                    Approval Gate: &ldquo;{activeRun.steps[activeRun.currentStep]?.groupName || activeRun.steps[activeRun.currentStep]?.name || 'Phase'}&rdquo; Complete
+                  </span>
+                  <span className="text-muted-foreground ml-2 hidden sm:inline text-[11px]">
+                    Approve to proceed, or write prompt below to reproduce phase
+                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedWorkflowId(null)}
-                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer shrink-0 transition-colors"
-                title="Deselect workflow and switch to direct agent chat"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={approveGate}
+                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer px-3 shadow-2xs font-medium"
+                >
+                  <Check className="h-3 w-3 mr-1" />
+                  Approve & Continue
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={rejectGate}
+                  className="h-7 text-xs text-destructive hover:text-destructive cursor-pointer px-2"
+                  title="Stop workflow execution"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Stop Run
+                </Button>
+              </div>
             </div>
           )}
 
@@ -572,6 +751,7 @@ export function ProjectAIChat({
                 {workflows.length > 0 ? (
                   workflows.map((wf) => {
                     const isSelected = selectedWorkflowId === wf.id;
+                    const wfMissingCount = wf.steps.filter((st) => !isSkillInstalled(st)).length;
                     return (
                       <DropdownMenuItem
                         key={wf.id}
@@ -579,13 +759,21 @@ export function ProjectAIChat({
                         className="flex items-center justify-between py-2 cursor-pointer"
                       >
                         <div className="flex items-start gap-2 min-w-0 flex-1">
-                          <WorkflowIcon className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                          <WorkflowIcon className={cn("h-3.5 w-3.5 shrink-0 mt-0.5", wfMissingCount > 0 ? "text-destructive" : "text-primary")} />
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-semibold text-xs text-foreground truncate">{wf.name}</span>
                               <span className="text-[9.5px] font-mono text-muted-foreground">
                                 {wf.steps.length} {wf.steps.length === 1 ? 'skill' : 'skills'}
                               </span>
+                              {wfMissingCount > 0 && (
+                                <Badge
+                                  variant="destructive"
+                                  className="text-[9px] px-1.5 py-0 h-4 font-semibold"
+                                >
+                                  {wfMissingCount} missing
+                                </Badge>
+                              )}
                             </div>
                             {wf.description && (
                               <p className="text-[10.5px] text-muted-foreground line-clamp-1">
@@ -606,14 +794,11 @@ export function ProjectAIChat({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {activeRun ? (
+            {activeRun && activeRun.status !== 'waiting' ? (
               <div className="flex-1 flex items-center justify-between h-11 px-3.5 rounded-xl border border-primary/30 bg-primary/5 shadow-2xs text-xs">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {activeRun.status === 'running' && (
                     <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                  )}
-                  {activeRun.status === 'waiting' && (
-                    <ShieldAlert className="h-4 w-4 text-amber-500 animate-pulse shrink-0" />
                   )}
                   {activeRun.status === 'paused' && (
                     <Pause className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -621,45 +806,19 @@ export function ProjectAIChat({
 
                   <div className="min-w-0 truncate">
                     <span className="font-semibold text-foreground">
-                      {activeRun.status === 'waiting'
-                        ? `Gate Checkpoint: "${activeRun.steps[activeRun.currentStep]?.name || 'Gate'}"`
-                        : activeRun.status === 'paused'
-                        ? `Paused at skill ${Math.min(activeRun.currentStep + 1, activeRun.steps.length)} of ${activeRun.steps.length}`
+                      {activeRun.status === 'paused'
+                        ? `Paused at skill ${Math.min(activeRun.currentStep + 1, activeRun.steps.length)} of ${activeRun.steps.length}:`
                         : `Running skill ${Math.min(activeRun.currentStep + 1, activeRun.steps.length)} of ${activeRun.steps.length}:`}
                     </span>
-                    {activeRun.status !== 'waiting' && (
-                      <span className="text-muted-foreground ml-1.5 font-medium truncate">
-                        &ldquo;{activeRun.steps[activeRun.currentStep]?.name}&rdquo;
-                      </span>
-                    )}
+                    <span className="text-muted-foreground ml-1.5 font-medium truncate">
+                      &ldquo;{activeRun.steps[activeRun.currentStep]?.name}&rdquo;
+                    </span>
                   </div>
                 </div>
 
                 {/* Progress Actions */}
                 <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                  {activeRun.status === 'waiting' ? (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={approveGate}
-                        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer px-2.5 shadow-2xs"
-                      >
-                        <Check className="h-3 w-3 mr-1" />
-                        Approve
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={rejectGate}
-                        className="h-7 text-xs text-destructive hover:text-destructive cursor-pointer px-2"
-                      >
-                        <X className="h-3 w-3 mr-1" />
-                        Reject
-                      </Button>
-                    </>
-                  ) : activeRun.status === 'running' ? (
+                  {activeRun.status === 'running' ? (
                     <>
                       <Button
                         type="button"
@@ -717,7 +876,9 @@ export function ProjectAIChat({
               >
                 <Input
                   placeholder={
-                    selectedWorkflow
+                    activeRun?.status === 'waiting'
+                      ? `Write prompt feedback to reproduce this phase, or approve above...`
+                      : selectedWorkflow
                       ? `Run flow "${selectedWorkflow.name}" (optional instructions)...`
                       : session
                       ? `Message ${session.name}...`
@@ -726,16 +887,45 @@ export function ProjectAIChat({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   disabled={loading}
-                  className="pr-12 text-xs h-11 rounded-xl bg-muted/20 border-border/70 focus-visible:ring-1 shadow-2xs"
+                  className={cn(
+                    "pr-12 text-xs h-11 rounded-xl bg-muted/20 border-border/70 focus-visible:ring-1 shadow-2xs",
+                    activeRun?.status === 'waiting' && "border-amber-500/50 bg-amber-500/5 focus-visible:ring-amber-500/50"
+                  )}
                 />
                 <Button
                   type="submit"
                   size="iconSm"
-                  disabled={loading || (!input.trim() && !selectedWorkflow)}
-                  className="absolute right-2 h-7 w-7 rounded-lg cursor-pointer"
-                  title={selectedWorkflow ? 'Launch workflow' : 'Send message'}
+                  disabled={
+                    loading ||
+                    (activeRun?.status === 'waiting'
+                      ? !input.trim()
+                      : selectedWorkflow
+                      ? hasMissingSkills
+                      : !input.trim())
+                  }
+                  className={cn(
+                    "absolute right-2 h-7 w-7 rounded-lg cursor-pointer transition-colors",
+                    activeRun?.status === 'waiting'
+                      ? "bg-amber-600 hover:bg-amber-700 text-white"
+                      : selectedWorkflow && hasMissingSkills && "opacity-40 cursor-not-allowed bg-destructive/60 hover:bg-destructive/60"
+                  )}
+                  title={
+                    activeRun?.status === 'waiting'
+                      ? 'Send feedback to reproduce phase'
+                      : selectedWorkflow
+                      ? hasMissingSkills
+                        ? 'Execution blocked: workflow contains missing skills. Reinstall in Workflow Editor to run.'
+                        : 'Launch workflow'
+                      : 'Send message'
+                  }
                 >
-                  {selectedWorkflow ? <Play className="h-3.5 w-3.5 fill-current" /> : <Send className="h-3.5 w-3.5" />}
+                  {activeRun?.status === 'waiting' ? (
+                    <Send className="h-3.5 w-3.5" />
+                  ) : selectedWorkflow ? (
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
                 </Button>
               </form>
             )}
@@ -763,12 +953,6 @@ export function ProjectAIChat({
                 </span>
               )}
             </Button>
-          </div>
-          <div className="mt-1.5 flex items-center justify-between px-1 text-[10px] text-muted-foreground/60">
-            <span>{session ? session.name : project.name}</span>
-            <span>
-              {selectedWorkflow ? `Flow: ${selectedWorkflow.name} (${selectedWorkflow.steps.length} skills)` : `Agent: ${activeHarness.name}`}
-            </span>
           </div>
         </div>
       </div>

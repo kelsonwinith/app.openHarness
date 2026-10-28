@@ -164,10 +164,10 @@ export function WorkflowRunMessage({ runId }: WorkflowRunMessageProps) {
             <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <h4 className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-                Gate Checkpoint: &ldquo;{currentStep.name}&rdquo;
+                Gate Checkpoint: &ldquo;{currentStep.groupName || currentStep.name}&rdquo;
               </h4>
               <p className="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5 leading-relaxed">
-                This workflow step requires your authorization before continuing to subsequent skills.
+                This phase has finished. Approve to proceed, or write feedback in the chat prompt below to reproduce this phase with adjustments.
               </p>
             </div>
           </div>
@@ -175,7 +175,7 @@ export function WorkflowRunMessage({ runId }: WorkflowRunMessageProps) {
             <Button
               size="sm"
               onClick={approveGate}
-              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-2xs"
+              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-2xs font-medium"
             >
               <Check className="h-3 w-3 mr-1" />
               Approve & Continue
@@ -187,7 +187,7 @@ export function WorkflowRunMessage({ runId }: WorkflowRunMessageProps) {
               className="h-7 text-xs text-destructive hover:text-destructive cursor-pointer"
             >
               <X className="h-3 w-3 mr-1" />
-              Reject & Stop
+              Stop Run
             </Button>
           </div>
         </div>

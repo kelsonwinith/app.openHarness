@@ -9,7 +9,10 @@ import {
   GripVertical,
   ShieldAlert,
   Settings2,
-  FolderTree
+  FolderTree,
+  AlertTriangle,
+  Download,
+  Loader2
 } from 'lucide-react';
 import {
   DndContext,
@@ -44,17 +47,21 @@ import { cn } from '@/lib/utils';
 interface SortableStepItemProps {
   step: Step;
   baseSkill?: Skill;
-  onToggleGate: (stepId: string, currentGate: boolean) => void;
   onDeleteStep: (stepId: string) => void;
   onOpenStepSettings: (step: Step) => void;
+  onReinstallStep: (step: Step) => void;
+  isReinstalling?: boolean;
+  reinstallError?: string;
 }
 
 function SortableStepItem({
   step,
   baseSkill,
-  onToggleGate,
   onDeleteStep,
-  onOpenStepSettings
+  onOpenStepSettings,
+  onReinstallStep,
+  isReinstalling,
+  reinstallError
 }: SortableStepItemProps) {
   const {
     attributes,
@@ -71,12 +78,21 @@ function SortableStepItem({
     zIndex: isDragging ? 50 : undefined,
   };
 
+  const isMissing = !baseSkill;
+  const missingSkillName =
+    step.skillName ||
+    (step.skillId.startsWith('skill-') ? step.skillId.replace(/^skill-/, '') : step.skillId) ||
+    'Unknown Skill';
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        'group relative flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2 shadow-2xs transition-all select-none min-h-[40px]',
+        'group relative flex items-center justify-between gap-3 rounded-lg border px-3 py-2 shadow-2xs transition-all select-none min-h-[44px]',
+        isMissing
+          ? 'border-destructive/60 bg-destructive/5 text-destructive dark:bg-destructive/10 dark:border-destructive/50'
+          : 'border-border bg-card',
         isDragging && 'opacity-50 ring-2 ring-primary/40 z-20 shadow-md'
       )}
     >
@@ -84,7 +100,12 @@ function SortableStepItem({
       <div
         {...attributes}
         {...listeners}
-        className="cursor-grab text-muted-foreground/40 hover:text-foreground active:cursor-grabbing p-0.5 rounded touch-none shrink-0"
+        className={cn(
+          'cursor-grab p-0.5 rounded touch-none shrink-0 transition-colors',
+          isMissing
+            ? 'text-destructive/50 hover:text-destructive active:cursor-grabbing'
+            : 'text-muted-foreground/40 hover:text-foreground active:cursor-grabbing'
+        )}
         title="Drag to reorder skill within group"
       >
         <GripVertical className="h-4 w-4" />
@@ -93,41 +114,81 @@ function SortableStepItem({
       {/* Skill details */}
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-xs leading-normal">
-            {baseSkill?.name || 'Custom Skill'}
-          </span>
-          {step.gate && (
-            <Badge variant="gate" className="text-[10px] py-0">
-              <ShieldAlert className="h-3 w-3 mr-0.5" /> Gate Checkpoint
-            </Badge>
+          {isMissing ? (
+            <>
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+              <span className="font-semibold text-xs leading-normal text-destructive line-through opacity-85">
+                {missingSkillName}
+              </span>
+              <Badge variant="destructive" className="text-[10px] py-0 px-1.5 font-mono uppercase tracking-wider h-5">
+                Missing Skill
+              </Badge>
+            </>
+          ) : (
+            <span className="font-semibold text-xs leading-normal text-foreground">
+              {baseSkill.name}
+            </span>
           )}
+
           {step.instructions && (
             <span className="text-[11px] text-muted-foreground/80 italic bg-muted/60 px-1.5 py-0.5 rounded">
               Override: {step.instructions}
             </span>
           )}
         </div>
+
+        {isMissing && (
+          <div className="flex flex-col gap-1 mt-0.5">
+            <p className="text-[11px] text-destructive/80 font-normal leading-tight">
+              Skill not found on host machine. Reinstall it to resume execution or delete it from this workflow.
+            </p>
+            {reinstallError && (
+              <div className="flex items-center gap-1.5 text-[10px] font-mono text-destructive">
+                <span className="bg-destructive/15 border border-destructive/30 px-1.5 py-0.5 rounded font-medium truncate max-w-sm" title={reinstallError}>
+                  Installation failed: {reinstallError}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Quick Controls */}
-      <div className="flex items-center gap-1 shrink-0">
-        <Button
-          size="sm"
-          variant={step.gate ? 'default' : 'ghost'}
-          onClick={() => onToggleGate(step.id, step.gate)}
-          className={cn(
-            'h-7 px-2 text-[11px]',
-            step.gate && 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300'
-          )}
-          title={step.gate ? 'Gate active: run will pause here' : 'Add approval gate'}
-        >
-          <ShieldAlert className="h-3.5 w-3.5 mr-1" />
-          Gate
-        </Button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {isMissing ? (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onReinstallStep(step)}
+              disabled={isReinstalling}
+              className="h-7 px-2.5 text-xs gap-1.5 border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive cursor-pointer font-medium"
+              title={`Reinstall "${missingSkillName}" onto host system`}
+            >
+              {isReinstalling ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span>{isReinstalling ? 'Reinstalling...' : 'Reinstall'}</span>
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDeleteStep(step.id)}
+              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+              title="Remove this missing skill from workflow"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Delete</span>
+            </Button>
+          </>
+        ) : null}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="iconSm" className="h-7 w-7">
+            <Button variant="ghost" size="iconSm" className="h-7 w-7 text-muted-foreground hover:text-foreground">
               <MoreVertical className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -157,10 +218,13 @@ interface SortableGroupCardProps {
   onRenameGroup: (name: string) => void;
   onDeleteGroup: () => void;
   onAddSkill: () => void;
-  onToggleGate: (stepId: string, currentGate: boolean) => void;
+  onToggleGroupGate: (groupId: string) => void;
   onDeleteStep: (stepId: string) => void;
   onOpenStepSettings: (step: Step) => void;
   onReorderSteps: (oldIndex: number, newIndex: number) => void;
+  onReinstallStep: (step: Step) => void;
+  reinstallingStepId: string | null;
+  reinstallErrors: Record<string, string>;
 }
 
 function SortableGroupCard({
@@ -169,10 +233,13 @@ function SortableGroupCard({
   onRenameGroup,
   onDeleteGroup,
   onAddSkill,
-  onToggleGate,
+  onToggleGroupGate,
   onDeleteStep,
   onOpenStepSettings,
-  onReorderSteps
+  onReorderSteps,
+  onReinstallStep,
+  reinstallingStepId,
+  reinstallErrors
 }: SortableGroupCardProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(group.name);
@@ -282,6 +349,22 @@ function SortableGroupCard({
         <div className="flex items-center gap-1.5 shrink-0">
           <Button
             size="sm"
+            variant={group.gate ? 'default' : 'outline'}
+            onClick={() => onToggleGroupGate(group.id)}
+            className={cn(
+              'h-7 text-xs px-2.5 gap-1.5 cursor-pointer font-medium transition-all shadow-2xs',
+              group.gate
+                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+            title={group.gate ? 'Gate active: execution will pause after this group' : 'Enable approval gate after this group'}
+          >
+            <ShieldAlert className="h-3.5 w-3.5" />
+            <span>Gate</span>
+          </Button>
+
+          <Button
+            size="sm"
             variant="outline"
             onClick={onAddSkill}
             className="h-7 text-xs px-2 gap-1"
@@ -315,15 +398,22 @@ function SortableGroupCard({
           >
             <div className="space-y-2">
               {group.steps.map((step) => {
-                const baseSkill = skills.find((s) => s.id === step.skillId);
+                const baseSkill = skills.find(
+                  (s) =>
+                    s.id === step.skillId ||
+                    (step.skillName && s.name.toLowerCase() === step.skillName.toLowerCase()) ||
+                    (step.skillId.startsWith('skill-') && s.name.toLowerCase() === step.skillId.replace(/^skill-/, '').toLowerCase())
+                );
                 return (
                   <SortableStepItem
                     key={step.id}
                     step={step}
                     baseSkill={baseSkill}
-                    onToggleGate={onToggleGate}
                     onDeleteStep={onDeleteStep}
                     onOpenStepSettings={onOpenStepSettings}
+                    onReinstallStep={onReinstallStep}
+                    isReinstalling={reinstallingStepId === step.id}
+                    reinstallError={reinstallErrors[step.id]}
                   />
                 );
               })}
@@ -342,6 +432,19 @@ function SortableGroupCard({
             <Plus className="h-3 w-3 mr-1" />
             Add First Skill
           </Button>
+        </div>
+      )}
+
+      {/* Group-level Gate Checkpoint Banner */}
+      {group.gate && (
+        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-400">
+          <span className="flex items-center gap-1.5 font-medium">
+            <ShieldAlert className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            Approval Gate Checkpoint
+          </span>
+          <span className="text-[10px] text-muted-foreground hidden sm:inline">
+            Execution will pause here for developer approval before proceeding
+          </span>
         </div>
       )}
     </div>
@@ -382,17 +485,92 @@ export default function WorkflowDetailPage() {
 
   const workflows = useConsoleStore((s) => s.workflows);
   const skills = useConsoleStore((s) => s.skills);
+  const syncSkills = useConsoleStore((s) => s.syncSkills);
+  const createSkill = useConsoleStore((s) => s.createSkill);
   const addGroup = useConsoleStore((s) => s.addGroup);
   const renameGroup = useConsoleStore((s) => s.renameGroup);
   const deleteGroup = useConsoleStore((s) => s.deleteGroup);
   const reorderGroups = useConsoleStore((s) => s.reorderGroups);
   const reorderGroupSteps = useConsoleStore((s) => s.reorderGroupSteps);
   const deleteGroupStep = useConsoleStore((s) => s.deleteGroupStep);
+  const toggleGroupGate = useConsoleStore((s) => s.toggleGroupGate);
   const updateStep = useConsoleStore((s) => s.updateStep);
 
   const openDialog = useUIStore((s) => s.openDialog);
+  const [reinstallingStepId, setReinstallingStepId] = useState<string | null>(null);
+  const [reinstallErrors, setReinstallErrors] = useState<Record<string, string>>({});
 
   const workflow = workflows.find((w) => w.id === workflowId);
+
+  // Ensure skills are loaded even on direct deep-link to workflow
+  React.useEffect(() => {
+    if (skills.length === 0) {
+      fetch('/api/skills/list')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.skills && Array.isArray(data.skills)) {
+            syncSkills(data.skills);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [skills.length, syncSkills]);
+
+  const handleReinstallStep = async (step: Step) => {
+    if (!workflow) return;
+
+    const missingName =
+      step.skillName ||
+      (step.skillId.startsWith('skill-') ? step.skillId.replace(/^skill-/, '') : step.skillId);
+    const source = step.skillSource || missingName;
+
+    // Clear any previous error for this step
+    setReinstallErrors((prev) => {
+      const next = { ...prev };
+      delete next[step.id];
+      return next;
+    });
+    setReinstallingStepId(step.id);
+
+    try {
+      const res = await fetch('/api/skills/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, skillName: missingName })
+      });
+      const data = await res.json();
+      if (res.ok && data.skill) {
+        createSkill(data.skill);
+        updateStep(workflow.id, step.id, {
+          skillId: data.skill.id,
+          skillName: data.skill.name,
+          skillSource: data.skill.source
+        });
+
+        // Sync fresh skills from disk into global store
+        fetch('/api/skills/list')
+          .then((r) => r.json())
+          .then((listData) => {
+            if (listData?.skills && Array.isArray(listData.skills)) {
+              syncSkills(listData.skills);
+            }
+          })
+          .catch(() => {});
+      } else {
+        setReinstallErrors((prev) => ({
+          ...prev,
+          [step.id]: data?.error || 'Installation failed'
+        }));
+      }
+    } catch (err: any) {
+      setReinstallErrors((prev) => ({
+        ...prev,
+        [step.id]: err?.message || 'Network error installing skill'
+      }));
+    } finally {
+      setReinstallingStepId(null);
+    }
+  };
 
   // Group sensors
   const groupSensors = useSensors(
@@ -461,10 +639,6 @@ export default function WorkflowDetailPage() {
     });
   };
 
-  const toggleGate = (stepId: string, currentGate: boolean) => {
-    updateStep(workflow.id, stepId, { gate: !currentGate });
-  };
-
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-4">
       {workflowGroups.length > 0 ? (
@@ -494,7 +668,7 @@ export default function WorkflowDetailPage() {
                         groupId: group.id
                       })
                     }
-                    onToggleGate={toggleGate}
+                    onToggleGroupGate={(groupId) => toggleGroupGate(workflow.id, groupId)}
                     onDeleteStep={(stepId) => deleteGroupStep(workflow.id, group.id, stepId)}
                     onOpenStepSettings={(s) =>
                       openDialog('edit-step', {
@@ -506,6 +680,9 @@ export default function WorkflowDetailPage() {
                     onReorderSteps={(oldIndex, newIndex) =>
                       reorderGroupSteps(workflow.id, group.id, oldIndex, newIndex)
                     }
+                    onReinstallStep={handleReinstallStep}
+                    reinstallingStepId={reinstallingStepId}
+                    reinstallErrors={reinstallErrors}
                   />
                 </React.Fragment>
               ))}

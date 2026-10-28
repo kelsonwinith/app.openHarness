@@ -36,15 +36,18 @@ export interface Skill {
 export interface Step {
   id: string;
   skillId: string;
-  gate: boolean;
+  gate?: boolean;
   instructions?: string;
   groupId?: string;
+  skillName?: string;
+  skillSource?: string;
 }
 
 export interface StepGroup {
   id: string;
   name: string;
   description?: string;
+  gate?: boolean;
   steps: Step[];
 }
 
@@ -90,6 +93,8 @@ export interface RunStep {
   stepId: string;
   skillId: string;
   name: string;
+  groupId?: string;
+  groupName?: string;
   gate: boolean;
   instructions?: string;
   status: RunStepStatus;

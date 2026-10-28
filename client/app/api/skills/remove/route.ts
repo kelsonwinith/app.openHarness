@@ -15,21 +15,13 @@ export async function POST(req: Request) {
     }
 
     const cleanName = skillName.trim();
+    const homeDir = process.env.HOME || '';
     const env = {
       ...process.env,
       PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}`
     };
 
-    const homeDir = process.env.HOME || '';
-
-    // 1. Run official CLI removal strictly in home directory: npx skills remove --global <skill-name> -y
-    try {
-      await execAsync(`npx skills remove --global ${cleanName} -y`, { cwd: homeDir, env });
-    } catch (cliErr) {
-      console.warn(`CLI removal warning for "${cleanName}":`, cliErr);
-    }
-
-    // 2. Also ensure ~/.agents/skills/<skill-name> is completely wiped on disk
+    // 1. Immediately wipe ~/.agents/skills/<skill-name> from disk (< 2ms)
     const globalSkillDir = path.join(homeDir, '.agents', 'skills', cleanName);
     if (fs.existsSync(globalSkillDir)) {
       try {
@@ -38,6 +30,24 @@ export async function POST(req: Request) {
         console.warn(`Failed to remove directory ${globalSkillDir}:`, rmErr);
       }
     }
+
+    // 2. Remove entry from ~/.agents/skills-lock.json if present (< 2ms)
+    const lockfilePath = path.join(homeDir, '.agents', 'skills-lock.json');
+    if (fs.existsSync(lockfilePath)) {
+      try {
+        const raw = fs.readFileSync(lockfilePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed?.skills && parsed.skills[cleanName]) {
+          delete parsed.skills[cleanName];
+          fs.writeFileSync(lockfilePath, JSON.stringify(parsed, null, 2), 'utf8');
+        }
+      } catch {}
+    }
+
+    // 3. Asynchronously invoke official CLI removal to update internal CLI state without blocking response
+    execAsync(`npx skills remove --global ${cleanName} -y`, { cwd: homeDir, env }).catch((cliErr) => {
+      console.warn(`CLI background cleanup warning for "${cleanName}":`, cliErr);
+    });
 
     return NextResponse.json({ success: true, removed: cleanName });
   } catch (err: unknown) {

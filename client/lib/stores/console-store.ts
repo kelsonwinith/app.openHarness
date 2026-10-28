@@ -3,7 +3,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 import { DEFAULT_SKILLS, HARNESSES, SUPPORTED_HARNESSES } from '../domain/constants';
 import { generateSampleData } from '../domain/seed';
 import { getSkillFiles } from '../domain/skill-files';
-import { Harness, HarnessId, Project, Run, Session, ChatMessage, Skill, Step, StepGroup, Workflow } from '../domain/types';
+import { Harness, HarnessId, Project, Run, RunStep, Session, ChatMessage, Skill, Step, StepGroup, Workflow } from '../domain/types';
 import { simulationEngine } from '../simulation/simulation-engine';
 import { consoleRepository } from '../storage/fs-repo';
 import { NotificationSettings } from '../storage/repository';
@@ -72,6 +72,7 @@ interface ConsoleStoreState {
   renameGroup: (wfId: string, groupId: string, name: string) => void;
   deleteGroup: (wfId: string, groupId: string) => void;
   reorderGroups: (wfId: string, oldIndex: number, newIndex: number) => void;
+  toggleGroupGate: (wfId: string, groupId: string) => void;
   addSkillToGroup: (wfId: string, groupId: string, skillId: string, gate?: boolean, instructions?: string) => Step;
   reorderGroupSteps: (wfId: string, groupId: string, oldIndex: number, newIndex: number) => void;
   deleteGroupStep: (wfId: string, groupId: string, stepId: string) => void;
@@ -103,6 +104,7 @@ interface ConsoleStoreState {
   stopRun: () => void;
   approveGate: () => void;
   rejectGate: () => void;
+  reviseGate: (feedback: string) => void;
   cycleRunSpeed: () => void;
 }
 
@@ -218,6 +220,15 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
           notifyOnComplete: true
         }
       });
+
+      // Immediately synchronize real physical skills from host system (< 5ms direct filesystem scan)
+      try {
+        const res = await fetch('/api/skills/list');
+        const data = await res.json();
+        if (data?.skills && Array.isArray(data.skills)) {
+          get().syncSkills(data.skills);
+        }
+      } catch {}
     },
 
     updateNotifications: (updates) => {
@@ -600,13 +611,30 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
       });
     },
 
+    toggleGroupGate: (wfId, groupId) => {
+      set((state) => {
+        const next = state.workflows.map((wf) => {
+          if (wf.id !== wfId) return wf;
+          const groups = (wf.groups || []).map((g) =>
+            g.id === groupId ? { ...g, gate: !g.gate } : g
+          );
+          return { ...wf, groups, updatedAt: Date.now() };
+        });
+        persistCurrentState({ workflows: next });
+        return { workflows: next };
+      });
+    },
+
     addSkillToGroup: (wfId, groupId, skillId, gate = false, instructions = '') => {
+      const targetSkill = get().skills.find((s) => s.id === skillId);
       const newStep: Step = {
         id: uid('step'),
         skillId,
         gate,
         instructions,
-        groupId
+        groupId,
+        skillName: targetSkill?.name,
+        skillSource: targetSkill?.source
       };
       set((state) => {
         const next = state.workflows.map((wf) => {
@@ -675,6 +703,7 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
     },
 
     addStep: (wfId, skillId, gate = false, instructions = '') => {
+      const targetSkill = get().skills.find((s) => s.id === skillId);
       set((state) => {
         const next = state.workflows.map((wf) => {
           if (wf.id !== wfId) return wf;
@@ -682,7 +711,9 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
             id: uid('step'),
             skillId,
             gate,
-            instructions
+            instructions,
+            skillName: targetSkill?.name,
+            skillSource: targetSkill?.source
           };
           return {
             ...wf,
@@ -843,21 +874,44 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
 
     deleteSkill: (id) => {
       const current = get();
-      // ADR 0001 & ADR 0060: Deleting a skill automatically prunes its steps from all workflows and groups
+      const targetSkill = current.skills.find((s) => s.id === id);
+
+      // Preserve workflow steps intact; snapshot metadata so missing step card can offer 1-click reinstall
       let affectedWorkflowsCount = 0;
       const nextWorkflows = current.workflows.map((wf) => {
-        const hasSkillInSteps = wf.steps.some((s) => s.skillId === id);
-        const hasSkillInGroups = (wf.groups || []).some((g) => g.steps.some((s) => s.skillId === id));
+        const matchesSkill = (s: Step) =>
+          s.skillId === id ||
+          (targetSkill && (
+            (s.skillName && s.skillName.toLowerCase() === targetSkill.name.toLowerCase()) ||
+            (s.skillId.startsWith('skill-') && s.skillId.replace(/^skill-/, '').toLowerCase() === targetSkill.name.toLowerCase()) ||
+            s.skillId.toLowerCase() === targetSkill.name.toLowerCase()
+          ));
+
+        const hasSkillInSteps = wf.steps.some(matchesSkill);
+        const hasSkillInGroups = (wf.groups || []).some((g) => g.steps.some(matchesSkill));
 
         if (hasSkillInSteps || hasSkillInGroups) {
           affectedWorkflowsCount += 1;
+          const snapshotStep = (st: Step): Step => {
+            if (matchesSkill(st)) {
+              return {
+                ...st,
+                skillName: st.skillName || targetSkill?.name,
+                skillSource: st.skillSource || targetSkill?.source
+              };
+            }
+            return st;
+          };
+
+          const groups = (wf.groups || []).map((g) => ({
+            ...g,
+            steps: g.steps.map(snapshotStep)
+          }));
+
           return {
             ...wf,
-            steps: wf.steps.filter((s) => s.skillId !== id),
-            groups: (wf.groups || []).map((g) => ({
-              ...g,
-              steps: g.steps.filter((s) => s.skillId !== id)
-            })),
+            groups,
+            steps: groups.length > 0 ? groups.flatMap((g) => g.steps) : wf.steps.map(snapshotStep),
             updatedAt: Date.now()
           };
         }
@@ -901,22 +955,34 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
       const targetSessionId = sessionId ?? state.activeSessionId ?? undefined;
       const now = Date.now();
 
-      // Snapshot steps per ADR 0001 & ADR 0002
-      const stepsSnapshot = wf.steps.map((s) => {
-        const skill = state.skills.find((sk) => sk.id === s.skillId);
-        return {
-          id: uid('rst'),
-          stepId: s.id,
-          skillId: s.skillId,
-          name: skill ? skill.name : 'Unknown skill',
-          gate: !!s.gate,
-          instructions: s.instructions || '',
-          status: 'pending' as const,
-          activities: [],
-          startedAt: null,
-          endedAt: null
-        };
-      });
+      // Snapshot steps per ADR 0001, ADR 0002 & ADR 0089: Flow/Group-level Gate Checkpoints
+      // If a group has gate: true, the LAST step in that group triggers the gate checkpoint
+      // after executing its skills before continuing to the subsequent group.
+      const groups = (wf.groups && wf.groups.length > 0)
+        ? wf.groups
+        : [{ id: 'default', name: 'Main', gate: false, steps: wf.steps }];
+
+      const stepsSnapshot: RunStep[] = [];
+      for (const group of groups) {
+        group.steps.forEach((s, sIdx) => {
+          const isGated = !!group.gate && sIdx === group.steps.length - 1;
+          const skill = state.skills.find((sk) => sk.id === s.skillId);
+          stepsSnapshot.push({
+            id: uid('rst'),
+            stepId: s.id,
+            skillId: s.skillId,
+            name: skill ? skill.name : (s.skillName || 'Unknown skill'),
+            groupId: group.id,
+            groupName: group.name,
+            gate: isGated,
+            instructions: s.instructions || '',
+            status: 'pending' as const,
+            activities: [],
+            startedAt: null,
+            endedAt: null
+          });
+        });
+      }
 
       const run: Run = {
         id: uid('run'),
@@ -965,6 +1031,7 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
     stopRun: () => simulationEngine.stop(),
     approveGate: () => simulationEngine.approveGate(),
     rejectGate: () => simulationEngine.rejectGate(),
+    reviseGate: (feedback) => simulationEngine.reviseGate(feedback),
     cycleRunSpeed: () => {
       const current = get();
       const active = current.runs.find((r) => ['running', 'waiting', 'paused'].includes(r.status));

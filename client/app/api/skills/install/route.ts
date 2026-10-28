@@ -77,40 +77,168 @@ function parseSourceToName(source: string): string {
   return firstToken.split('/').pop()?.replace('.git', '') || firstToken;
 }
 
+function loadLockfileSources(): Record<string, string> {
+  const sources: Record<string, string> = {};
+  const homeDir = process.env.HOME || '';
+
+  const candidates = [
+    path.join(homeDir, '.agents', '.skill-lock.json'),
+    path.join(homeDir, '.agents', 'skills-lock.json'),
+    path.join(process.cwd(), 'skills-lock.json'),
+    path.join(process.cwd(), '.agents', '.skill-lock.json'),
+    path.join(process.cwd(), '.agents', 'skills-lock.json'),
+    path.join(process.cwd(), '..', 'skills-lock.json'),
+    path.join(process.cwd(), '..', '.agents', '.skill-lock.json'),
+    path.join(process.cwd(), '..', '.agents', 'skills-lock.json')
+  ];
+
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed?.skills && typeof parsed.skills === 'object') {
+          for (const [name, meta] of Object.entries(parsed.skills)) {
+            const src = (meta as any)?.source;
+            if (src && !sources[name]) {
+              sources[name] = src;
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return sources;
+}
+
+function copyDirectorySync(srcDir: string, destDir: string) {
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== '.git' && entry.name !== 'node_modules') {
+        copyDirectorySync(srcPath, destPath);
+      }
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 export async function POST(req: Request) {
   try {
-    const { source, projectPath } = await req.json();
+    const { source, skillName, projectPath } = await req.json();
 
     if (!source || typeof source !== 'string' || !source.trim()) {
       return NextResponse.json({ error: 'Skill package or repository source is required' }, { status: 400 });
     }
 
-    const cleanSource = source.trim().replace(/^(?:npx\s+)?skills\s+(?:add\s+)?/, '');
     const homeDir = process.env.HOME || '';
-
-    // Execute real global skill installation strictly into ~/.agents/skills (-g flag)
-    const cmd = `npx skills add ${cleanSource} -g -y`;
     const env = {
       ...process.env,
       PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}`
     };
 
-    let stdout = '';
-    try {
-      const result = await execAsync(cmd, { cwd: homeDir, env });
-      stdout = result.stdout;
-    } catch (execErr: unknown) {
-      const errOut = execErr instanceof Error ? execErr.message : String(execErr);
-      return NextResponse.json(
-        { error: `Failed to install skill "${cleanSource}": ${errOut}` },
-        { status: 500 }
-      );
+    const cleanSource = source.trim().replace(/^(?:npx\s+)?skills\s+(?:add\s+)?/, '');
+    const targetSkillName =
+      (skillName && typeof skillName === 'string' && skillName.trim())
+        ? skillName.trim()
+        : parseSourceToName(cleanSource);
+
+    // If cleanSource is a bare skill name (e.g. "frontend-design" without owner/repo or URL),
+    // resolve its install package via lockfiles or CLI search
+    let installTarget = cleanSource;
+    const isBareName = !cleanSource.includes('/') && !cleanSource.includes('@') && !cleanSource.startsWith('http');
+
+    if (isBareName) {
+      const lockSources = loadLockfileSources();
+      if (lockSources[targetSkillName]) {
+        installTarget = `${lockSources[targetSkillName]}@${targetSkillName}`;
+      } else {
+        // Query official skills CLI registry
+        try {
+          const { stdout: findOut } = await execAsync(`npx skills find ${targetSkillName}`, { cwd: homeDir, env, timeout: 6000 });
+          const match = findOut.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+)/);
+          if (match && match[1]) {
+            installTarget = match[1];
+          }
+        } catch {
+          // ignore find failure
+        }
+      }
+    } else if (targetSkillName && !cleanSource.includes('@') && !cleanSource.includes('--skill')) {
+      // If a repo like "anthropics/skills" was given and target skill is "frontend-design", specify target
+      if (cleanSource.includes('/') && !cleanSource.startsWith('http')) {
+        installTarget = `${cleanSource}@${targetSkillName}`;
+      }
     }
 
-    // Determine derived skill name from input, stdout, or frontmatter
-    let finalName = parseSourceToName(cleanSource);
+    let stdout = '';
+    let installSuccess = false;
 
-    // Check stdout for exact installed skill name
+    // Check if target is still a bare name and could not be resolved via registry
+    if (!installTarget.includes('/') && !installTarget.includes('@') && !installTarget.startsWith('http')) {
+      // Fallback: check workspace local .agents/skills/<targetSkillName>
+      const localCandidates = [
+        path.join(process.cwd(), '.agents', 'skills', targetSkillName),
+        path.join(process.cwd(), '..', '.agents', 'skills', targetSkillName)
+      ];
+      for (const loc of localCandidates) {
+        if (fs.existsSync(loc)) {
+          const dest = path.join(homeDir, '.agents', 'skills', targetSkillName);
+          copyDirectorySync(loc, dest);
+          installSuccess = true;
+          stdout = `Copied local skill from ${loc} to ${dest}`;
+          break;
+        }
+      }
+
+      if (!installSuccess) {
+        return NextResponse.json(
+          { error: `Unable to resolve install repository for skill "${targetSkillName}". Please specify the repository (e.g. owner/repo@${targetSkillName}).` },
+          { status: 400 }
+        );
+      }
+    } else {
+      const cmd = `npx skills add ${installTarget} -g -y`;
+      try {
+        const result = await execAsync(cmd, { cwd: homeDir, env });
+        stdout = result.stdout;
+        installSuccess = true;
+      } catch (execErr: unknown) {
+        // If npx skills add fails, check local fallback before returning error
+        const localCandidates = [
+          path.join(process.cwd(), '.agents', 'skills', targetSkillName),
+          path.join(process.cwd(), '..', '.agents', 'skills', targetSkillName)
+        ];
+        for (const loc of localCandidates) {
+          if (fs.existsSync(loc)) {
+            const dest = path.join(homeDir, '.agents', 'skills', targetSkillName);
+            copyDirectorySync(loc, dest);
+            installSuccess = true;
+            stdout = `Copied local fallback skill from ${loc} to ${dest}`;
+            break;
+          }
+        }
+
+        if (!installSuccess) {
+          const errOut = execErr instanceof Error ? execErr.message : String(execErr);
+          return NextResponse.json(
+            { error: `Failed to install skill "${installTarget}": ${errOut}` },
+            { status: 500 }
+          );
+        }
+      }
+    }
+
+    // Determine derived skill name from target, stdout, or frontmatter
+    let finalName = targetSkillName || parseSourceToName(installTarget);
+
     const stdoutMatch =
       stdout.match(/Selected \d+ skill(?:s)?:\s*([a-zA-Z0-9_-]+)/i) ||
       stdout.match(/[✓✔]\s*([a-zA-Z0-9_-]+)\s+\(copied\)/i) ||
@@ -123,6 +251,14 @@ export async function POST(req: Request) {
     // Look for installed skill folder strictly in global ~/.agents/skills
     const globalSkillDir = path.join(homeDir, '.agents', 'skills', finalName);
     let foundDir: string | null = fs.existsSync(globalSkillDir) ? globalSkillDir : null;
+
+    if (!foundDir && targetSkillName) {
+      const altDir = path.join(homeDir, '.agents', 'skills', targetSkillName);
+      if (fs.existsSync(altDir)) {
+        foundDir = altDir;
+        finalName = targetSkillName;
+      }
+    }
 
     let instructions = `Execute ${finalName} instructions.`;
     let files: SkillFile[] = [];
@@ -140,10 +276,10 @@ export async function POST(req: Request) {
     }
 
     const skill = {
-      id: `skill-${Date.now()}-${finalName}`,
+      id: `skill-${finalName}`,
       name: finalName,
       instructions,
-      source: cleanSource,
+      source: installTarget,
       files,
       createdAt: Date.now(),
       updatedAt: Date.now()

@@ -80,6 +80,7 @@ export default function SkillsPage() {
 
   const [loading, setLoading] = useState(skills.length === 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deletingSkillId, setDeletingSkillId] = useState<string | null>(null);
 
   const loadSkills = useCallback(async (isManual: boolean = false) => {
     if (isManual) setIsRefreshing(true);
@@ -167,11 +168,12 @@ export default function SkillsPage() {
       title: `Delete skill "${skill.name}"?`,
       description:
         usage > 0
-          ? `This skill is currently referenced in ${usage} step(s) across ${affectedWfs.length} workflow(s). Deleting it will execute "npx skills remove --global ${skill.name}" and automatically prune those step references from each affected workflow.`
-          : `This will execute "npx skills remove --global ${skill.name}" and permanently delete it from ~/.agents/skills.`,
+          ? `This skill is currently referenced in ${usage} step(s) across ${affectedWfs.length} workflow(s). The steps will remain in workflows marked as missing so they can be reinstalled anytime.`
+          : `This will permanently remove "${skill.name}" from ~/.agents/skills.`,
       confirmLabel: 'Delete Skill',
       confirmVariant: 'destructive',
       onConfirm: async () => {
+        setDeletingSkillId(skill.id);
         try {
           await fetch('/api/skills/remove', {
             method: 'POST',
@@ -179,12 +181,13 @@ export default function SkillsPage() {
             body: JSON.stringify({ skillName: skill.name })
           });
         } catch (err) {
-          console.error('Failed to remove skill via CLI:', err);
-        }
-
-        deleteSkill(skill.id);
-        if (selectedSkill?.id === skill.id) {
-          setSelectedSkill(null);
+          console.error('Failed to remove skill:', err);
+        } finally {
+          deleteSkill(skill.id);
+          if (selectedSkill?.id === skill.id) {
+            setSelectedSkill(null);
+          }
+          setDeletingSkillId(null);
         }
       }
     });
@@ -295,12 +298,16 @@ export default function SkillsPage() {
                     const usageCount = getSkillUsageCount(skill.id);
                     const createdAt = skill.createdAt || Date.now();
                     const updatedAt = skill.updatedAt || createdAt;
+                    const isDeleting = deletingSkillId === skill.id;
 
                     return (
                       <tr
                         key={skill.id}
                         onClick={() => setSelectedSkill(skill)}
-                        className="group hover:bg-muted/40 cursor-pointer transition-colors h-11"
+                        className={cn(
+                          'group hover:bg-muted/40 cursor-pointer transition-colors h-11',
+                          isDeleting && 'opacity-50 pointer-events-none bg-destructive/5'
+                        )}
                       >
                         {/* Name Column */}
                         <td className="py-2.5 px-4 align-middle">
@@ -363,11 +370,16 @@ export default function SkillsPage() {
                             <Button
                               variant="ghost"
                               size="iconSm"
+                              disabled={isDeleting}
                               className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer transition-colors"
                               title="Delete skill"
                               onClick={(e) => handleDeleteSkill(skill, e)}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              {isDeleting ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-destructive" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
                             </Button>
                           </div>
                         </td>

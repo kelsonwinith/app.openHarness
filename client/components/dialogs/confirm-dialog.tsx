@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/lib/stores/ui-store';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 
 interface ConfirmDialogPayload {
   title?: string;
@@ -19,12 +19,19 @@ interface ConfirmDialogPayload {
   warning?: string;
   confirmLabel?: string;
   confirmVariant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
-  onConfirm?: () => void;
+  onConfirm?: () => Promise<void> | void;
 }
 
 export function ConfirmDialog() {
   const { activeDialog, dialogPayload, closeDialog } = useUIStore();
   const isOpen = activeDialog === 'confirm';
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsLoading(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen || !dialogPayload) return null;
 
@@ -37,13 +44,26 @@ export function ConfirmDialog() {
     onConfirm
   } = dialogPayload as ConfirmDialogPayload;
 
-  const handleConfirm = () => {
-    closeDialog();
-    if (onConfirm) onConfirm();
+  const handleConfirm = async () => {
+    if (isLoading) return;
+
+    if (onConfirm) {
+      try {
+        setIsLoading(true);
+        await onConfirm();
+      } catch (err) {
+        console.error('Error during confirmation action:', err);
+      } finally {
+        setIsLoading(false);
+        closeDialog();
+      }
+    } else {
+      closeDialog();
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isLoading && closeDialog()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm text-foreground">
@@ -60,14 +80,17 @@ export function ConfirmDialog() {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={closeDialog}>
+          <Button variant="outline" onClick={closeDialog} disabled={isLoading} className="cursor-pointer">
             Cancel
           </Button>
           <Button
             variant={(confirmVariant || 'destructive') as 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'}
             onClick={handleConfirm}
+            disabled={isLoading}
+            className="gap-1.5 cursor-pointer"
           >
-            {confirmLabel}
+            {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            <span>{isLoading ? 'Processing...' : confirmLabel}</span>
           </Button>
         </DialogFooter>
       </DialogContent>

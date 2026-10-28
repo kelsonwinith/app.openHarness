@@ -192,6 +192,41 @@ export class SimulationEngine {
     this.onUpdate?.(this.activeRun, 'stopped');
   }
 
+  reviseGate(feedback: string) {
+    if (!this.activeRun || this.activeRun.status !== 'waiting') return;
+    const currentStep = this.activeRun.steps[this.activeRun.currentStep];
+    if (!currentStep) return;
+
+    const currentGroupId = currentStep.groupId;
+
+    // Find the first step in this group to restart reproduction from
+    let firstGroupStepIdx = this.activeRun.currentStep;
+    if (currentGroupId) {
+      const idx = this.activeRun.steps.findIndex((s) => s.groupId === currentGroupId);
+      if (idx !== -1) firstGroupStepIdx = idx;
+    }
+
+    // Reset all steps in this group back to pending and log user feedback
+    this.activeRun.steps.forEach((step, idx) => {
+      const isSameGroup = currentGroupId ? step.groupId === currentGroupId : idx === this.activeRun!.currentStep;
+      if (isSameGroup) {
+        step.status = 'pending';
+        step.startedAt = null;
+        step.endedAt = null;
+        step.activities.push({
+          k: 'ask',
+          text: `Feedback received: "${feedback.trim()}" — re-running phase`,
+          at: Date.now()
+        });
+      }
+    });
+
+    this.activeRun.currentStep = firstGroupStepIdx;
+    this.activeRun.status = 'running';
+    this.onUpdate?.(this.activeRun, 'activity');
+    this.scheduleNextTick(250);
+  }
+
   setSpeed(speed: number) {
     if (!this.activeRun) return;
     this.activeRun.speed = speed;

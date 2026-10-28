@@ -44,9 +44,17 @@ function readDirectoryFiles(dirPath: string, rootDir: string = dirPath, depth: n
 
 function loadLockfileSources(): Record<string, string> {
   const sources: Record<string, string> = {};
+  const homeDir = process.env.HOME || '';
 
   const candidates = [
-    path.join(process.env.HOME || '', '.agents', 'skills-lock.json')
+    path.join(homeDir, '.agents', '.skill-lock.json'),
+    path.join(homeDir, '.agents', 'skills-lock.json'),
+    path.join(process.cwd(), 'skills-lock.json'),
+    path.join(process.cwd(), '.agents', '.skill-lock.json'),
+    path.join(process.cwd(), '.agents', 'skills-lock.json'),
+    path.join(process.cwd(), '..', 'skills-lock.json'),
+    path.join(process.cwd(), '..', '.agents', '.skill-lock.json'),
+    path.join(process.cwd(), '..', '.agents', 'skills-lock.json')
   ];
 
   for (const filePath of candidates) {
@@ -56,8 +64,9 @@ function loadLockfileSources(): Record<string, string> {
         const parsed = JSON.parse(raw);
         if (parsed?.skills && typeof parsed.skills === 'object') {
           for (const [name, meta] of Object.entries(parsed.skills)) {
-            if ((meta as any)?.source) {
-              sources[name] = (meta as any).source;
+            const src = (meta as any)?.source;
+            if (src && !sources[name]) {
+              sources[name] = src;
             }
           }
         }
