@@ -63,15 +63,3 @@ export function buildSampleRun(wf: Workflow, harnessId: HarnessId, startedAt: nu
     steps
   };
 }
-
-export function generateSampleData(): {
-  skills: Skill[];
-  workflows: Workflow[];
-  runs: Run[];
-} {
-  return {
-    skills: [],
-    workflows: [],
-    runs: []
-  };
-}

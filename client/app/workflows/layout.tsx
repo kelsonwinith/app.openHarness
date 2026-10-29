@@ -11,7 +11,7 @@ export default function WorkflowsLayout({
       <Suspense fallback={<div className="w-72 shrink-0 border-r bg-muted/15" />}>
         <WorkflowSidebar />
       </Suspense>
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading workflow...</div>}>
           {children}
         </Suspense>

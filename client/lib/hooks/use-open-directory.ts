@@ -48,7 +48,6 @@ export function useOpenDirectory() {
       const newProject = createProject({
         name: openData.project.name,
         path: openData.project.path,
-        description: `Imported from ${openData.project.path}`,
         currentBranch: openData.project.currentBranch,
         gitRemoteUrl: openData.project.gitRemoteUrl
       });

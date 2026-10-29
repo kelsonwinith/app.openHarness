@@ -235,4 +235,25 @@ export class TerminalManager {
     sessions.delete(projectId);
     return this.getOrCreateSession(projectId, projectPath);
   }
+
+  static killAll(signal: string = 'SIGTERM'): number {
+    let count = 0;
+    for (const projectId of Array.from(sessions.keys())) {
+      if (this.kill(projectId, signal)) {
+        count++;
+      }
+    }
+    return count;
+  }
+}
+
+if (typeof process !== 'undefined') {
+  const cleanup = () => {
+    try {
+      TerminalManager.killAll('SIGKILL');
+    } catch {}
+  };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+  process.on('exit', cleanup);
 }

@@ -78,6 +78,31 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z]|\r/g, '');
 }
 
+const activeAgentProcesses = new Set<ReturnType<typeof spawn>>();
+
+export function killAllAgentProcesses(): number {
+  let count = 0;
+  for (const proc of Array.from(activeAgentProcesses)) {
+    try {
+      proc.kill('SIGKILL');
+      count++;
+    } catch {}
+  }
+  activeAgentProcesses.clear();
+  return count;
+}
+
+if (typeof process !== 'undefined') {
+  const cleanup = () => {
+    try {
+      killAllAgentProcesses();
+    } catch {}
+  };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+  process.on('exit', cleanup);
+}
+
 export async function POST(req: Request) {
   try {
     const { projectPath, sessionId, prompt, model } = await req.json();
@@ -123,6 +148,10 @@ export async function POST(req: Request) {
             }
           });
 
+          if (childProcess) {
+            activeAgentProcesses.add(childProcess);
+          }
+
           childProcess.stdout?.on('data', (chunk: Buffer) => {
             const text = stripAnsi(chunk.toString());
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
@@ -134,11 +163,13 @@ export async function POST(req: Request) {
           });
 
           childProcess.on('error', (err) => {
+            if (childProcess) activeAgentProcesses.delete(childProcess);
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`));
             controller.close();
           });
 
           childProcess.on('close', async (code) => {
+            if (childProcess) activeAgentProcesses.delete(childProcess);
             let fileChanges: FileChange[] = [];
             try {
               fileChanges = await getGitFileChanges(workingDir);

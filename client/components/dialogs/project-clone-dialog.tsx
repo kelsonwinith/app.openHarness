@@ -73,7 +73,6 @@ export function ProjectCloneDialog() {
       const project = createProject({
         name: resData.project.name,
         path: resData.project.path,
-        description: `Cloned from ${resData.project.gitRemoteUrl}`,
         currentBranch: resData.project.currentBranch,
         gitRemoteUrl: resData.project.gitRemoteUrl
       });

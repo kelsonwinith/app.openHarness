@@ -608,85 +608,87 @@ export function ProjectSidebar() {
       </div>
 
       {/* Projects and Sessions Tree */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        <DndContext
-          sensors={projectSensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleProjectDragEnd}
-        >
-          <SortableContext
-            items={filteredProjects.map((p) => p.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {filteredProjects.map((project) => {
-              const isProjectActive = activeProjectId === project.id && !activeSessionId;
-              const isExpanded = expanded[project.id] ?? true;
-              const projectSessions = sessions.filter((s) => s.projectId === project.id);
-
-              const isMissing = !!missingProjects[project.id];
-
-              return (
-                <SortableProjectItem
-                  key={project.id}
-                  project={project}
-                  isProjectActive={isProjectActive}
-                  isExpanded={isExpanded}
-                  activeSessionId={activeSessionId}
-                  projectSessions={projectSessions}
-                  isMissing={isMissing}
-                  onToggleExpand={(e) => toggleExpand(project.id, e)}
-                  onSelectProject={() => {
-                    setActiveProject(project.id);
-                    setActiveSession(null);
-                  }}
-                  onNewChat={() => {
-                    if (isMissing) {
-                      handleLocateFolder(project.id);
-                      return;
-                    }
-                    setActiveProject(project.id);
-                    setActiveSession(null);
-                    router.push(`/projects/${project.id}`);
-                  }}
-                  onReveal={() => handleReveal(project.path)}
-                  onLocateFolder={() => handleLocateFolder(project.id)}
-                  onDeleteProject={() => handleDeleteProject(project.id, project.name)}
-                  onSelectSession={(sessId) => {
-                    setActiveProject(project.id);
-                    setActiveSession(sessId);
-                  }}
-                  onRenameSession={(sess, newName) => {
-                    updateSession(sess.id, { name: newName });
-                  }}
-                  onDeleteSession={(sess) => {
-                    openDialog('confirm', {
-                      title: `Delete session "${sess.name}"?`,
-                      description: 'Are you sure you want to delete this session? This action cannot be undone.',
-                      confirmLabel: 'Delete Session',
-                      confirmVariant: 'destructive',
-                      onConfirm: () => {
-                        deleteSession(sess.id);
-                        if (activeSessionId === sess.id) {
-                          setActiveSession(null);
-                          router.push(`/projects/${project.id}`);
-                        }
-                      }
-                    });
-                  }}
-                  onReorderSessions={(oldIndex, newIndex) =>
-                    reorderSessions(project.id, oldIndex, newIndex)
-                  }
-                />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
-
-        {filteredProjects.length === 0 && (
-          <div className="p-4 text-center">
-            <FolderGit2 className="mx-auto h-6 w-6 text-muted-foreground/40" />
-            <p className="mt-2 text-xs text-muted-foreground">No projects found</p>
+      <div className="flex-1 overflow-y-auto p-2 flex flex-col min-h-0">
+        {filteredProjects.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+            <FolderGit2 className="h-7 w-7 text-muted-foreground/40 mb-2" />
+            <p className="text-xs text-muted-foreground">No projects found</p>
           </div>
+        ) : (
+          <DndContext
+            sensors={projectSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleProjectDragEnd}
+          >
+            <SortableContext
+              items={filteredProjects.map((p) => p.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-1">
+                {filteredProjects.map((project) => {
+                  const isProjectActive = activeProjectId === project.id && !activeSessionId;
+                  const isExpanded = expanded[project.id] ?? true;
+                  const projectSessions = sessions.filter((s) => s.projectId === project.id);
+
+                  const isMissing = !!missingProjects[project.id];
+
+                  return (
+                    <SortableProjectItem
+                      key={project.id}
+                      project={project}
+                      isProjectActive={isProjectActive}
+                      isExpanded={isExpanded}
+                      activeSessionId={activeSessionId}
+                      projectSessions={projectSessions}
+                      isMissing={isMissing}
+                      onToggleExpand={(e) => toggleExpand(project.id, e)}
+                      onSelectProject={() => {
+                        setActiveProject(project.id);
+                        setActiveSession(null);
+                      }}
+                      onNewChat={() => {
+                        if (isMissing) {
+                          handleLocateFolder(project.id);
+                          return;
+                        }
+                        setActiveProject(project.id);
+                        setActiveSession(null);
+                        router.push(`/projects/${project.id}`);
+                      }}
+                      onReveal={() => handleReveal(project.path)}
+                      onLocateFolder={() => handleLocateFolder(project.id)}
+                      onDeleteProject={() => handleDeleteProject(project.id, project.name)}
+                      onSelectSession={(sessId) => {
+                        setActiveProject(project.id);
+                        setActiveSession(sessId);
+                      }}
+                      onRenameSession={(sess, newName) => {
+                        updateSession(sess.id, { name: newName });
+                      }}
+                      onDeleteSession={(sess) => {
+                        openDialog('confirm', {
+                          title: `Delete session "${sess.name}"?`,
+                          description: 'Are you sure you want to delete this session? This action cannot be undone.',
+                          confirmLabel: 'Delete Session',
+                          confirmVariant: 'destructive',
+                          onConfirm: () => {
+                            deleteSession(sess.id);
+                            if (activeSessionId === sess.id) {
+                              setActiveSession(null);
+                              router.push(`/projects/${project.id}`);
+                            }
+                          }
+                        });
+                      }}
+                      onReorderSessions={(oldIndex, newIndex) =>
+                        reorderSessions(project.id, oldIndex, newIndex)
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </aside>

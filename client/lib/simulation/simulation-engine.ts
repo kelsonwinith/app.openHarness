@@ -215,7 +215,7 @@ export class SimulationEngine {
         step.endedAt = null;
         step.activities.push({
           k: 'ask',
-          text: `Feedback received: "${feedback.trim()}" — re-running phase`,
+          text: `Feedback received: "${feedback.trim()}" — re-running step`,
           at: Date.now()
         });
       }

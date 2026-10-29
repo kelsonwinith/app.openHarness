@@ -9,7 +9,7 @@ const execAsync = util.promisify(exec);
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, targetPath, initGit = true, description = '' } = body;
+    const { name, targetPath, initGit = true } = body;
 
     if (!name || !targetPath) {
       return NextResponse.json({ error: 'Name and target path are required' }, { status: 400 });
@@ -44,7 +44,6 @@ export async function POST(request: Request) {
       success: true,
       project: {
         name: path.basename(resolvedPath) || name.trim(),
-        description: description.trim(),
         path: resolvedPath,
         currentBranch: branch,
         gitRemoteUrl: null

@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Workflow, Plus, Database } from 'lucide-react';
+import { Workflow, Plus } from 'lucide-react';
 import { useConsoleStore } from '@/lib/stores/console-store';
 import { useUIStore } from '@/lib/stores/ui-store';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,6 @@ export default function WorkflowsIndexPage() {
   const router = useRouter();
   const workflows = useConsoleStore((s) => s.workflows);
   const isInitialized = useConsoleStore((s) => s.isInitialized);
-  const importSampleData = useConsoleStore((s) => s.importSampleData);
   const openDialog = useUIStore((s) => s.openDialog);
 
   // If initialized and workflows exist, auto-navigate to the first one
@@ -26,10 +25,6 @@ export default function WorkflowsIndexPage() {
   if (workflows.length > 0) {
     return null; // Will redirect
   }
-
-  const handleImportSampleData = async () => {
-    await importSampleData();
-  };
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-8 text-center">
@@ -47,14 +42,10 @@ export default function WorkflowsIndexPage() {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+        <div className="flex items-center justify-center pt-2">
           <Button onClick={() => openDialog('workflow-form')}>
             <Plus className="h-3.5 w-3.5 mr-1" />
             Create Workflow
-          </Button>
-          <Button variant="outline" onClick={handleImportSampleData}>
-            <Database className="h-3.5 w-3.5 mr-1" />
-            Import Sample Data
           </Button>
         </div>
       </div>

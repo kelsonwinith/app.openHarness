@@ -4,7 +4,7 @@ import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useConsoleStore } from '@/lib/stores/console-store';
 import { Button } from '@/components/ui/button';
-import { ProjectAIChat } from '@/components/projects/project-ai-chat';
+import { PlayableExecutionCanvas } from '@/components/flow/playable-execution-canvas';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -22,7 +22,7 @@ export default function ProjectDetailPage() {
           variant="outline"
           size="sm"
           onClick={() => router.push('/projects')}
-          className="mt-3"
+          className="mt-3 cursor-pointer"
         >
           View all projects
         </Button>
@@ -31,8 +31,8 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col min-h-0 overflow-hidden bg-background">
-      <ProjectAIChat project={project} />
+    <div className="relative flex h-full w-full flex-col min-h-0 overflow-hidden bg-background">
+      <PlayableExecutionCanvas project={project} />
     </div>
   );
 }

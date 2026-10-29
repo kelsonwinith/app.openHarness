@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { useConsoleStore } from '@/lib/stores/console-store';
 import { useUIStore } from '@/lib/stores/ui-store';
 import { FolderPlus, Loader2 } from 'lucide-react';
@@ -21,7 +20,6 @@ import { FolderPlus, Loader2 } from 'lucide-react';
 interface ProjectCreateFormValues {
   name: string;
   targetPath: string;
-  description: string;
   initGit: boolean;
 }
 
@@ -45,7 +43,6 @@ export function ProjectCreateDialog() {
     defaultValues: {
       name: '',
       targetPath: '',
-      description: '',
       initGit: true
     }
   });
@@ -65,7 +62,6 @@ export function ProjectCreateDialog() {
         body: JSON.stringify({
           name: data.name.trim(),
           targetPath: data.targetPath.trim(),
-          description: data.description.trim(),
           initGit: data.initGit
         })
       });
@@ -78,7 +74,6 @@ export function ProjectCreateDialog() {
       const project = createProject({
         name: resData.project.name,
         path: resData.project.path,
-        description: resData.project.description,
         currentBranch: resData.project.currentBranch,
         gitRemoteUrl: resData.project.gitRemoteUrl
       });
@@ -176,16 +171,7 @@ export function ProjectCreateDialog() {
               )}
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Description (Optional)</label>
-              <Textarea
-                placeholder="Brief summary of this codebase or application..."
-                {...register('description')}
-                className="min-h-[60px]"
-              />
-            </div>
-
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none pt-1">
               <input
                 type="checkbox"
                 checked={initGitValue}

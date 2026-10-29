@@ -185,8 +185,7 @@ export function WorkflowSidebar() {
   );
 
   const filteredWorkflows = workflows.filter((w) =>
-    w.name.toLowerCase().includes(search.toLowerCase()) ||
-    w.description.toLowerCase().includes(search.toLowerCase())
+    w.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -217,13 +216,16 @@ export function WorkflowSidebar() {
 
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/15">
+    <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/15 select-none">
       {/* Top search & create header */}
-      <div className="flex flex-col gap-2 p-3 border-b">
+      <div className="flex flex-col gap-2 p-3 border-b shrink-0">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Link
+            href="/workflows"
+            className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+          >
             Workflows ({workflows.length})
-          </span>
+          </Link>
           <Button
             size="sm"
             variant="default"
@@ -246,35 +248,35 @@ export function WorkflowSidebar() {
       </div>
 
       {/* Workflow list */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={filteredWorkflows.map((w) => w.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-1">
-              {filteredWorkflows.map((wf) => (
-                <SortableWorkflowItem
-                  key={wf.id}
-                  wf={wf}
-                  isActive={activeWfId === wf.id}
-                  onRename={(newName) => updateWorkflow(wf.id, { name: newName })}
-                  onDelete={() => handleDeleteWorkflow(wf.id, wf.name)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {filteredWorkflows.length === 0 && (
-          <div className="p-4 text-center">
-            <WorkflowIcon className="mx-auto h-6 w-6 text-muted-foreground/40" />
-            <p className="mt-2 text-xs text-muted-foreground">No workflows found</p>
+      <div className="flex-1 overflow-y-auto p-2 flex flex-col min-h-0">
+        {filteredWorkflows.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+            <WorkflowIcon className="h-7 w-7 text-muted-foreground/40 mb-2" />
+            <p className="text-xs text-muted-foreground">No workflows found</p>
           </div>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={filteredWorkflows.map((w) => w.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-1">
+                {filteredWorkflows.map((wf) => (
+                  <SortableWorkflowItem
+                    key={wf.id}
+                    wf={wf}
+                    isActive={activeWfId === wf.id}
+                    onRename={(newName) => updateWorkflow(wf.id, { name: newName })}
+                    onDelete={() => handleDeleteWorkflow(wf.id, wf.name)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </aside>

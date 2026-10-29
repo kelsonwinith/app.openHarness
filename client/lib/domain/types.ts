@@ -48,15 +48,53 @@ export interface StepGroup {
   name: string;
   description?: string;
   gate?: boolean;
+  isInput?: boolean;
   steps: Step[];
+}
+
+export type WorkflowNodeType = 'workflowInput' | 'phase' | 'input';
+
+export interface InputNodeData {
+  label: string;
+  description?: string;
+  [key: string]: any;
+}
+
+export interface PhaseNodeData {
+  name: string;
+  description?: string;
+  harnessId?: string;
+  gate?: boolean;
+  isInput?: boolean;
+  steps: Step[];
+  [key: string]: any;
+}
+
+export interface CanvasNode {
+  id: string;
+  type: WorkflowNodeType;
+  position: { x: number; y: number };
+  data: InputNodeData | PhaseNodeData | Record<string, any>;
+}
+
+export interface CanvasEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  label?: string;
+  animated?: boolean;
 }
 
 export interface Workflow {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   groups?: StepGroup[];
   steps: Step[];
+  nodes?: CanvasNode[];
+  edges?: CanvasEdge[];
   updatedAt: number;
 }
 
@@ -106,7 +144,7 @@ export interface RunStep {
 export interface Project {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   path: string;
   gitRemoteUrl?: string | null;
   currentBranch?: string | null;

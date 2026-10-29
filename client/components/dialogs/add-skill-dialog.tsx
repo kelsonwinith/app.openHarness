@@ -217,7 +217,7 @@ export function AddSkillDialog() {
                   </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  Toggle skills to include or exclude them from this workflow phase.
+                  Toggle skills to include or exclude them from this workflow node.
                 </DialogDescription>
               </div>
 

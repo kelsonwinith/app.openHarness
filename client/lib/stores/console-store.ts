@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { arrayMove } from '@dnd-kit/sortable';
 import { DEFAULT_SKILLS, HARNESSES, SUPPORTED_HARNESSES } from '../domain/constants';
-import { generateSampleData } from '../domain/seed';
 import { getSkillFiles } from '../domain/skill-files';
 import { Harness, HarnessId, Project, Run, RunStep, Session, ChatMessage, Skill, Step, StepGroup, Workflow } from '../domain/types';
 import { simulationEngine } from '../simulation/simulation-engine';
@@ -31,7 +30,6 @@ interface ConsoleStoreState {
 
   // Initialization & Data Migration
   initialize: () => Promise<void>;
-  importSampleData: () => Promise<void>;
   resetToEmpty: () => Promise<void>;
 
   // Settings
@@ -60,7 +58,7 @@ interface ConsoleStoreState {
   reorderSessions: (projectId: string, oldIndex: number, newIndex: number) => void;
 
   // Workflow actions
-  createWorkflow: (name: string, description: string) => Workflow;
+  createWorkflow: (name: string, description?: string) => Workflow;
   updateWorkflow: (id: string, updates: Partial<Workflow>) => void;
   deleteWorkflow: (id: string) => void;
   duplicateWorkflow: (id: string) => Workflow | null;
@@ -236,20 +234,6 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
         const next = { ...state.notifications, ...updates };
         persistCurrentState({ notifications: next });
         return { notifications: next };
-      });
-    },
-
-    importSampleData: async () => {
-      const sample = generateSampleData();
-      set({
-        skills: sample.skills,
-        workflows: sample.workflows,
-        runs: sample.runs
-      });
-      persistCurrentState({
-        skills: sample.skills,
-        workflows: sample.workflows,
-        runs: sample.runs
       });
     },
 
@@ -457,12 +441,13 @@ export const useConsoleStore = create<ConsoleStoreState>((set, get) => {
       });
     },
 
-    createWorkflow: (name, description) => {
+    createWorkflow: (name, description = '') => {
       const newWf: Workflow = {
         id: uid('wf'),
         name: name.trim() || 'Untitled workflow',
-        description: description.trim(),
         steps: [],
+        nodes: [],
+        edges: [],
         updatedAt: Date.now()
       };
       set((state) => {

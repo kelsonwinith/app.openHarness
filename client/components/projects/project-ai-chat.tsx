@@ -200,7 +200,7 @@ export function ProjectAIChat({
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
 
-    // Feedback sent while at an approval gate reproduces the current phase with adjustments
+    // Feedback sent while at an approval gate reproduces the current step with adjustments
     if (activeRun && activeRun.status === 'waiting') {
       if (!text) return;
       setInput('');
@@ -626,10 +626,10 @@ export function ProjectAIChat({
                 <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse shrink-0" />
                 <div className="min-w-0 truncate">
                   <span className="font-semibold text-foreground">
-                    Approval Gate: &ldquo;{activeRun.steps[activeRun.currentStep]?.groupName || activeRun.steps[activeRun.currentStep]?.name || 'Phase'}&rdquo; Complete
+                    Approval Gate: &ldquo;{activeRun.steps[activeRun.currentStep]?.groupName || activeRun.steps[activeRun.currentStep]?.name || 'Step'}&rdquo; Complete
                   </span>
                   <span className="text-muted-foreground ml-2 hidden sm:inline text-[11px]">
-                    Approve to proceed, or write prompt below to reproduce phase
+                    Approve to proceed, or write prompt below to reproduce step
                   </span>
                 </div>
               </div>
@@ -775,11 +775,6 @@ export function ProjectAIChat({
                                 </Badge>
                               )}
                             </div>
-                            {wf.description && (
-                              <p className="text-[10.5px] text-muted-foreground line-clamp-1">
-                                {wf.description}
-                              </p>
-                            )}
                           </div>
                         </div>
                         {isSelected && <Check className="h-3.5 w-3.5 text-primary ml-2 shrink-0" />}
@@ -877,7 +872,7 @@ export function ProjectAIChat({
                 <Input
                   placeholder={
                     activeRun?.status === 'waiting'
-                      ? `Write prompt feedback to reproduce this phase, or approve above...`
+                      ? `Write prompt feedback to reproduce this step, or approve above...`
                       : selectedWorkflow
                       ? `Run flow "${selectedWorkflow.name}" (optional instructions)...`
                       : session
@@ -911,7 +906,7 @@ export function ProjectAIChat({
                   )}
                   title={
                     activeRun?.status === 'waiting'
-                      ? 'Send feedback to reproduce phase'
+                      ? 'Send feedback to reproduce step'
                       : selectedWorkflow
                       ? hasMissingSkills
                         ? 'Execution blocked: workflow contains missing skills. Reinstall in Workflow Editor to run.'

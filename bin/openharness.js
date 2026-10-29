@@ -164,11 +164,14 @@ async function main() {
     ? ['run', 'dev', '--', '-p', String(chosenPort)]
     : ['run', 'start', '--', '-p', String(chosenPort)];
 
+  const isWindows = process.platform === 'win32';
+
   // Suppress Next.js launching message by piping stdout/stderr
   const serverProcess = spawn('npm', serverArgs, {
     cwd: CLIENT_DIR,
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: true
+    shell: isWindows,
+    detached: !isWindows
   });
 
   let fatalError = '';
@@ -188,21 +191,58 @@ async function main() {
 
   // Graceful shutdown on Ctrl+C (SIGINT / SIGTERM)
   let isShuttingDown = false;
-  const handleShutdown = () => {
+  const handleShutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
-    process.stdout.write('\n\x1b[33m⏳ Stopping OpenHarness server...\x1b[0m ');
+    process.stdout.write('\n\x1b[33m⏳ Stopping OpenHarness server and active agents...\x1b[0m ');
 
-    // Send graceful shutdown to process
-    serverProcess.kill('SIGINT');
+    // 1. Send shutdown notification to server to terminate running agents and PTYs
+    try {
+      await new Promise((resolve) => {
+        const req = http.request(
+          {
+            hostname: 'localhost',
+            port: chosenPort,
+            path: '/api/shutdown',
+            method: 'POST',
+            timeout: 600
+          },
+          (res) => {
+            res.resume();
+            resolve();
+          }
+        );
+        req.on('error', () => resolve());
+        req.on('timeout', () => {
+          req.destroy();
+          resolve();
+        });
+        req.end();
+      });
+    } catch {}
+
+    // 2. Kill the process group tree
+    try {
+      if (!isWindows && serverProcess.pid) {
+        process.kill(-serverProcess.pid, 'SIGINT');
+      } else {
+        serverProcess.kill('SIGINT');
+      }
+    } catch {}
 
     const forceKillTimer = setTimeout(() => {
-      serverProcess.kill('SIGKILL');
+      try {
+        if (!isWindows && serverProcess.pid) {
+          process.kill(-serverProcess.pid, 'SIGKILL');
+        } else {
+          serverProcess.kill('SIGKILL');
+        }
+      } catch {}
       process.stdout.write('\x1b[32mDone.\x1b[0m\n');
       console.log('\x1b[36m👋 Goodbye!\x1b[0m\n');
       process.exit(0);
-    }, 2000);
+    }, 1200);
 
     serverProcess.on('exit', () => {
       clearTimeout(forceKillTimer);

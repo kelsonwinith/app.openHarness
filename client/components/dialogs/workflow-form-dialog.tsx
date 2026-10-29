@@ -13,13 +13,11 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { useConsoleStore } from '@/lib/stores/console-store';
 import { useUIStore } from '@/lib/stores/ui-store';
 
 interface WorkflowFormValues {
   name: string;
-  description: string;
 }
 
 function WorkflowFormContent({ workflowId }: { workflowId?: string }) {
@@ -38,20 +36,18 @@ function WorkflowFormContent({ workflowId }: { workflowId?: string }) {
     formState: { errors }
   } = useForm<WorkflowFormValues>({
     defaultValues: {
-      name: workflow?.name || '',
-      description: workflow?.description || ''
+      name: workflow?.name || ''
     }
   });
 
   const onSubmit = (data: WorkflowFormValues) => {
     if (isEditing && workflow) {
       updateWorkflow(workflow.id, {
-        name: data.name.trim(),
-        description: data.description.trim()
+        name: data.name.trim()
       });
       closeDialog();
     } else {
-      const created = createWorkflow(data.name.trim(), data.description.trim());
+      const created = createWorkflow(data.name.trim());
       closeDialog();
       router.push(`/workflows/${created.id}`);
     }
@@ -66,7 +62,7 @@ function WorkflowFormContent({ workflowId }: { workflowId?: string }) {
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Update workflow metadata and intent description.'
+              ? 'Update workflow metadata.'
               : 'Define a new harness-agnostic workflow sequence.'}
           </DialogDescription>
         </DialogHeader>
@@ -86,15 +82,6 @@ function WorkflowFormContent({ workflowId }: { workflowId?: string }) {
             {errors.name && (
               <p className="text-xs text-destructive font-medium">{errors.name.message}</p>
             )}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Description</label>
-            <Textarea
-              placeholder="Describe what outcome this workflow produces and where gates occur..."
-              {...register('description')}
-              className="min-h-[80px]"
-            />
           </div>
         </div>
 

@@ -4,7 +4,7 @@ import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useConsoleStore } from '@/lib/stores/console-store';
 import { Button } from '@/components/ui/button';
-import { ProjectAIChat } from '@/components/projects/project-ai-chat';
+import { PlayableExecutionCanvas } from '@/components/flow/playable-execution-canvas';
 
 export default function SessionWorkspacePage() {
   const params = useParams();
@@ -26,7 +26,7 @@ export default function SessionWorkspacePage() {
           variant="outline"
           size="sm"
           onClick={() => router.push(project ? `/projects/${project.id}` : '/projects')}
-          className="mt-3"
+          className="mt-3 cursor-pointer"
         >
           Back to {project?.name || 'Projects'}
         </Button>
@@ -35,8 +35,8 @@ export default function SessionWorkspacePage() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col min-h-0 overflow-hidden bg-background">
-      <ProjectAIChat project={project} session={session} />
+    <div className="relative flex h-full w-full flex-col min-h-0 overflow-hidden bg-background">
+      <PlayableExecutionCanvas project={project} session={session} />
     </div>
   );
 }

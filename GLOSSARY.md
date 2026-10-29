@@ -60,5 +60,30 @@ _Avoid_: Browser localStorage, cookie storage, web database
 An embedded interactive shell pseudo-terminal (PTY) inside a project session supporting ANSI color codes, live REPLs, and background execution (e.g. dev servers) while the developer chats with the agent harness.
 _Avoid_: Command log, static output box, dev runner popup
 
+**Workflow Canvas**:
+An interactive node-based visual graph (powered by React Flow) where developers construct and visualize workflows as directed decision graphs rather than static top-to-bottom lists. Workflows support explicit draft state editing with Save (confirm) and Cancel actions.
+_Avoid_: Drag-and-drop list, static form, JSON editor
+
+**Input Node**:
+A named entry point on the workflow canvas (e.g., `Add Feature`, `Fix Bug`, `Mock Spike`) representing a distinct developer intent. Workflows can have multiple independent input nodes, each branching into separate skill paths, decision gates, or harnesses.
+_Avoid_: Global chat input, single trigger, root entry
+
+**Skill Node**:
+A Phase Node on the workflow canvas encapsulating a stack of ordered skills, phase instructions, and an optional target harness assignment (e.g. OpenCode, Antigravity, Codex). Connected via directional edges to form multi-step execution pipelines.
+_Avoid_: Atomic single-skill node, step card, simple block
+
+**Collapsible Prompt Puck**:
+A floating interactive prompt composer positioned at the center of the session canvas. When collapsed, it condenses into a clean, minimal draggable puck (without cluttering text). Clicking it instantly re-expands the composer to edit the prompt context. Dragging and dropping the puck onto any available Input Node dispatches execution along that branch.
+_Avoid_: Traditional send button, stationary chat box, text-heavy draggable badge
+
+**Node Execution Log Modal**:
+A centered modal dialog opened by clicking the dedicated `Logs` button directly inside a phase node card during playable execution. Displays streaming agent traces, tool activities, timestamps, and checkpoint gate approval controls without obstructing the graph layout. In workflow authoring canvases, log buttons and modals are strictly omitted to maintain design-time isolation.
+_Avoid_: Sidepanel inspector drawer, accidental node-click drawer triggers, inline node expansion, permanent split screen
+
+**Playable Execution Canvas**:
+The session execution view replacing traditional plain chat transcripts. Displays the active workflow graph in an interactive, read-only state machine mode, showing animated token flow across nodes, live logs, gate approvals, and iteration loops directly on the graph.
+_Avoid_: Chat scroll stream, plain console log
+
+
 
 

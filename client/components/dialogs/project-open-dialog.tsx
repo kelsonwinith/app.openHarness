@@ -77,7 +77,6 @@ export function ProjectOpenDialog() {
       const project = createProject({
         name: data.project.name,
         path: data.project.path,
-        description: `Imported from ${data.project.path}`,
         currentBranch: data.project.currentBranch,
         gitRemoteUrl: data.project.gitRemoteUrl
       });

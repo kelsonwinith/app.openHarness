@@ -167,7 +167,7 @@ export function WorkflowRunMessage({ runId }: WorkflowRunMessageProps) {
                 Gate Checkpoint: &ldquo;{currentStep.groupName || currentStep.name}&rdquo;
               </h4>
               <p className="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5 leading-relaxed">
-                This phase has finished. Approve to proceed, or write feedback in the chat prompt below to reproduce this phase with adjustments.
+                This step has finished. Approve to proceed, or write feedback in the chat prompt below to reproduce this step with adjustments.
               </p>
             </div>
           </div>
